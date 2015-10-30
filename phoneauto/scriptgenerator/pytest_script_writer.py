@@ -98,16 +98,10 @@ class PytestScriptWriter(object):
         """Writes ending part of the script"""
         self.file.write('\n')
 
-    def write_last_call(self, index=0):
-        """Writes an statement which corresponds to last call of
-        the device's method
+    def get_recorder(self, device_index=0):
 
-        Args:
-            index (integer):
-                An index of the device from which
-                last call information is extracted
-        """
-        instance_name = '_s.devices[{0}]'.format(index)
-        code = self.devices[index].latest_call_code.format(
-            instance=instance_name)
-        self.file.write('    {0}\n'.format(code))
+        def recorder(written_text_template):
+            instance_name = '_s.devices[{0}]'.format(device_index)
+            text = written_text_template.format(instance=instance_name)
+            self.file.write('    {0}\n'.format(text))
+        return recorder

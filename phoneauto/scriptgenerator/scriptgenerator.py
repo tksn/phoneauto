@@ -52,8 +52,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].press_key('BACK')
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].press_key(
+            'BACK', record=self.writer.get_recorder(device_index))
 
     def home(self, device_index=0):
         """Presses 'home' key of the device
@@ -62,8 +62,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].press_key('HOME')
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].press_key(
+            'HOME', record=self.writer.get_recorder(device_index))
 
     def recent_apps(self, device_index=0):
         """Presses 'recent apps' key of the device
@@ -72,8 +72,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].press_key('APP_SWITCH')
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].press_key(
+            'APP_SWITCH', record=self.writer.get_recorder(device_index))
 
     def send_keys(self, position, keys, device_index=0):
         """Sends keys to the target element on the device
@@ -86,8 +86,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].find_send_keys(position, keys)
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].find_send_keys(
+            position, keys, record=self.writer.get_recorder(device_index))
 
     def click(self, position, device_index=0):
         """Clicks on the pixel or the element on the device
@@ -98,8 +98,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].find_click(position)
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].find_click(
+            position, record=self.writer.get_recorder(device_index))
 
     def long_click(self, position, device_index=0):
         """Long-clicks on the pixel or the element on the device
@@ -110,8 +110,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].find_long_click(position)
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].find_long_click(
+            position, record=self.writer.get_recorder(device_index))
 
     def swipe(self, start, end, device_index=0):
         """Performs swipe action on the device
@@ -124,8 +124,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].swipe(start, end)
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].swipe(
+            start, end, record=self.writer.get_recorder(device_index))
 
     def drag(self, start, end, device_index=0):
         """Performs drag-and-drop action on the device
@@ -138,8 +138,8 @@ class ScriptGenerator(object):
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].find_drag(start, end)
-        self.writer.write_last_call(device_index)
+        self.devices[device_index].find_drag(
+            start, end, record=self.writer.get_recorder(device_index))
 
     @staticmethod
     def query_touch_action(event_chain):

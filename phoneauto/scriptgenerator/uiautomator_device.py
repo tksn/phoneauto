@@ -7,7 +7,6 @@
 # pylint: disable=invalid-name
 
 from __future__ import unicode_literals
-import functools
 import sys
 import uiautomator
 
@@ -27,17 +26,9 @@ def _build_swipe_drag_str(method_str, *args, **kwargs):
     return '{instance}.' + text
 
 
-def _auto_call_str(func):
-    """Decorator which makes the given func record
-    code fragment string automatically"""
-    @functools.wraps(func)
-    def wrap_func(self, *args, **kwargs):
-        """Wrapping function"""
-        # pylint: disable=protected-access
-        str_func = getattr(self, '_str_' + func.__name__)
-        self._last_method_str = str_func(*args, **kwargs)
-        func(self, *args, **kwargs)
-    return wrap_func
+def _null_record(_):
+    """Dumb record function """
+    pass
 
 
 class UiautomatorUiElement(object):
@@ -117,7 +108,6 @@ class UiautomatorDevice(object):
                 (what you see in adb devices outputs)
         """
         self._device = uiautomator.Device(device_name)
-        self._last_method_str = ''
 
     def close(self):
         """Closes device"""
@@ -154,18 +144,6 @@ class UiautomatorDevice(object):
             list: list of code lines to close the device
         """
         return ['pass']
-
-    @property
-    def latest_call_code(self):
-        """Gives a code fragment corresponds to the latest call
-
-        Returns the text representation which corresponds to
-        the latest call, with the same arguments, of this object's method.
-
-        Returns:
-            text: text representation of the latest call
-        """
-        return self._last_method_str
 
     def find_clickable_element_contains(self, coord):
         """Finds the clickable element which contains given coordinate
@@ -290,223 +268,162 @@ class UiautomatorDevice(object):
         format_str = '{{instance}}.get_screenshot_as_file({0})'
         return format_str.format(_quote(file_path))
 
-    @_auto_call_str
-    def send_keys(self, uielement, keys):
+    def send_keys(self, uielement, keys, record=_null_record):
         """Sends characters to the UI element
 
         Args:
             uielement (object): Target UI element
             keys: Characters to be sent
+            record (function): optional record() for generating a script
         """
         uielement.send_keys(keys)
+        record('{0}.set_text({1})'.format(uielement, _quote(keys)))
 
-    @staticmethod
-    def _str_send_keys(uielement, keys):
-        """Returns code fragment to send characters to the UI element
-
-        See Also: send_keys
-        """
-        return '{0}.set_text({1})'.format(uielement, _quote(keys))
-
-    @_auto_call_str
-    def press_key(self, key_name):
-        """Press the key specified
-
-        Args:
-            key_name (text): the name of the key. ex)HOME, BACK, etc.
-        """
-        self._device.press(self.KEYCODE[key_name])
-
-    @classmethod
-    def _str_press_key(cls, key_name):
-        """Returns code fragment to press the key
-
-        See Also: press_key
-        """
-        format_str = '{{instance}}.press({0})'
-        return format_str.format(cls.KEYCODE[key_name])
-
-    def find_send_keys(self, coord, keys):
+    def find_send_keys(self, coord, keys, record=_null_record):
         """Find the best method to send the keys and executes sending
 
         Args:
             coord (tuple): The target's coordinate (x, y)
             keys (text): The keys to be sent
+            record (function): optional record() for generating a script
         """
         uielement = self.find_class_element_contains(
             coord, class_name='android.widget.EditText')
         if uielement is None:
             return
         else:
-            self.send_keys(uielement, keys)
+            self.send_keys(uielement, keys, record=record)
 
-    @_auto_call_str
-    def click(self, coord):
+    def press_key(self, key_name, record=_null_record):
+        """Press the key specified
+
+        Args:
+            key_name (text): the name of the key. ex)HOME, BACK, etc.
+            record (function): optional record() for generating a script
+        """
+        self._device.press(self.KEYCODE[key_name])
+        format_str = '{{instance}}.press({0})'
+        record(format_str.format(self.KEYCODE[key_name]))
+
+    def click(self, coord, record=_null_record):
         """Clicks on the coordinate specified
 
         Args:
             coord (tuple): Coordinate (x, y)
+            record (function): optional record() for generating a script
         """
         self._device.click(*coord)
+        record('{{instance}}.click({0}, {1})'.format(*coord))
 
-    @staticmethod
-    def _str_click(coord):
-        """Returns code fragment to click on the coordinate
-
-        See Also: click
-        """
-        return '{{instance}}.click({0}, {1})'.format(*coord)
-
-    @_auto_call_str
-    def click_element(self, uielement):
+    def click_element(self, uielement, record=_null_record):
         """Clicks on the UI element specified
 
         Args:
             uielement (object): The target UI element object
+            record (function): optional record() for generating a script
         """
         uielement.click()
+        record('{0}.click()'.format(uielement))
 
-    @staticmethod
-    def _str_click_element(uielement):
-        """Returns code fragment to click on the UI element
-
-        See Also: click_element
-        """
-        return '{0}.click()'.format(uielement)
-
-    def find_click(self, coord):
+    def find_click(self, coord, record=_null_record):
         """Find the best method to click on the coordinate and executes click
 
         Args:
             coord (tuple): Coordinate (x, y)
+            record (function): optional record() for generating a script
         """
         uielement = self.find_clickable_element_contains(coord)
         if uielement is None:
-            self.click(coord)
+            self.click(coord, record=record)
         else:
-            self.click_element(uielement)
+            self.click_element(uielement, record=record)
 
-    @_auto_call_str
-    def long_click(self, coord):
+    def long_click(self, coord, record=_null_record):
         """Long-clicks on the coordinate specified
 
         Args:
             coord (tuple): Coordinate (x, y)
+            record (function): optional record() for generating a script
         """
         self._device.long_click(*coord)
+        record('{{instance}}.long_click({0}, {1})'.format(*coord))
 
-    @staticmethod
-    def _str_long_click(coord):
-        """Returns code fragment to long-click on the coordinate
-
-        See Also: long_click
-        """
-        return '{{instance}}.long_click({0}, {1})'.format(*coord)
-
-    @_auto_call_str
-    def long_click_element(self, uielement):
+    def long_click_element(self, uielement, record=_null_record):
         """Long-clicks on the UI element specified
 
         Args:
             uielement (object): The target UI element object
+            record (function): optional record() for generating a script
         """
         uielement.long_click()
+        record('{0}.long_click()'.format(uielement))
 
-    @staticmethod
-    def _str_long_click_element(uielement):
-        """Returns code fragment to long-click on the UI element
-
-        See Also: long_click_element
-        """
-        return '{0}.long_click()'.format(uielement)
-
-    def find_long_click(self, coord):
+    def find_long_click(self, coord, record=_null_record):
         """Find the best method to long-click on the coordinate and
         executes long-click
 
         Args:
             coord (tuple): Coordinate (x, y)
+            record (function): optional record() for generating a script
         """
         uielement = self.find_long_clickable_element_contains(coord)
         if uielement is None:
-            self.long_click(coord)
+            self.long_click(coord, record=record)
         else:
-            self.long_click_element(uielement)
+            self.long_click_element(uielement, record=record)
 
-    @_auto_call_str
-    def swipe(self, start, end, **kwargs):
+    def swipe(self, start, end, record=_null_record, **kwargs):
         """Performs swipe action from start point to end point
 
         Args:
             start (tuple): Start point coordinate (xS, yS)
             end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
             kwargs (dict): optional key-value pairs.  ex)steps=100
         """
         (xS, yS), (xE, yE) = start, end
         self._device.swipe(xS, yS, xE, yE, **kwargs)
+        record(_build_swipe_drag_str('swipe', xS, yS, xE, yE, **kwargs))
 
-    @staticmethod
-    def _str_swipe(start, end, **kwargs):
-        """Returns code fragment to swipe on the device
-
-        See Also: swipe
-        """
-        (xS, yS), (xE, yE) = start, end
-        return _build_swipe_drag_str('swipe', xS, yS, xE, yE, **kwargs)
-
-    @_auto_call_str
-    def drag(self, start, end, **kwargs):
+    def drag(self, start, end, record=_null_record, **kwargs):
         """Performs drag action from start point to end point
 
         Args:
             start (tuple): Start point coordinate (xS, yS)
             end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
             kwargs (dict): optional key-value pairs.  ex)steps=100
         """
         (xS, yS), (xE, yE) = start, end
         self._device.drag(xS, yS, xE, yE, **kwargs)
+        record(_build_swipe_drag_str('drag', xS, yS, xE, yE, **kwargs))
 
-    @staticmethod
-    def _str_drag(start, end, **kwargs):
-        """Returns code fragment to drag on the device
-
-        See Also: drag
-        """
-        (xS, yS), (xE, yE) = start, end
-        return _build_swipe_drag_str('drag', xS, yS, xE, yE, **kwargs)
-
-    @_auto_call_str
-    def drag_element(self, uielement, end, **kwargs):
+    def drag_element(self, uielement, end, record=_null_record, **kwargs):
         """Performs drag action on the UI element to the end point
 
         Args:
             uielement (object): the object to drag
             end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
             kwargs (dict): optional key-value pairs.  ex)steps=100
         """
         xE, yE = end
         uielement.drag_to(xE, yE, **kwargs)
-
-    @staticmethod
-    def _str_drag_element(uielement, end, **kwargs):
-        """Returns code fragment to drag the element on the device
-
-        See Also: drag
-        """
-        xE, yE = end
         fmt_str = _build_swipe_drag_str('drag.to', xE, yE, **kwargs)
-        return fmt_str.format(instance=uielement)
+        record(fmt_str.format(instance=uielement))
 
-    def find_drag(self, start, end, **kwargs):
+    def find_drag(self, start, end, record=_null_record, **kwargs):
         """Find the best method to drag on the coordinate and
         executes drag
 
         Args:
             start (tuple): Start point coordinate (x, y)
             end (tuple): End point coordinate (x, y)
+            record (function): optional record() for generating a script
+            kwargs (dict): optional key-value pairs.  ex)steps=100
         """
         uielement = self.find_long_clickable_element_contains(start)
         if uielement is None:
-            self.drag(start, end, **kwargs)
+            self.drag(start, end, record=record, **kwargs)
         else:
-            self.drag_element(uielement, end, **kwargs)
+            self.drag_element(uielement, end, record=record, **kwargs)
