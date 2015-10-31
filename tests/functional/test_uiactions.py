@@ -3,10 +3,11 @@
 from __future__ import unicode_literals
 import io
 
-from mock import MagicMock
+from mock import MagicMock, call
 
 from phoneauto.scriptgenerator import scriptgenerator_main
 from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
+from phoneauto.scriptgenerator.keycode import get_keycode
 from tests.uiautomator_mock import uia_element_info
 
 
@@ -146,9 +147,9 @@ def test_drag_element(mocks, result_out):
 def assert_press(mocks, result_out, button_name, key_name):
     button_widget_name = 'mainframe.{0}'.format(button_name)
     mocks.uiroot.nametowidget(button_widget_name).process_event(None)
-    keycode = UiautomatorDevice.KEYCODE[key_name]
-    mocks.device.press.assert_called_with(keycode)
-    assert '.press({0})'.format(keycode) in last_line(result_out)
+    keycode = get_keycode(key_name)
+    mocks.device.press.assert_called_with(keycode, None)
+    assert '.press({0}, None)'.format(keycode) in last_line(result_out)
 
 
 @mainloop_testfunc
@@ -183,7 +184,7 @@ def execute_rightclickmenu_command(mocks, command_tag, position):
 
 
 @mainloop_testfunc
-def test_enter_text(mocks, result_out):
+def test_enter_text_element(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
 
     def actions_when_textentrywindow_displayed(textentrywindow):
@@ -197,3 +198,20 @@ def test_enter_text(mocks, result_out):
 
     elem.set_text.assert_called_with('ABCDEF')
     assert '.set_text(\'ABCDEF\')' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_enter_text_nonelement(mocks, result_out):
+
+    def actions_when_textentrywindow_displayed(textentrywindow):
+        textentrywindow_set_text_entry(textentrywindow, 'aB')
+        textentrywindow_click_ok(textentrywindow)
+
+    canvas = mocks.uiroot.nametowidget('mainframe.canvas')
+    canvas.wait_window.side_effect = actions_when_textentrywindow_displayed
+
+    execute_rightclickmenu_command(mocks, 'Enter text', (10, 20))
+
+    mocks.device.press.assert_has_calls([
+        call(29, None), call(30, 1)])
+    assert '.press(30, 1)'.format() in last_line(result_out)

@@ -99,8 +99,10 @@ class PytestScriptWriter(object):
         self.file.write('\n')
 
     def get_recorder(self, device_index=0):
+        """Returns recorder function"""
 
         def recorder(written_text_template):
+            """Creates string from given template string and record it"""
             instance_name = '_s.devices[{0}]'.format(device_index)
             text = written_text_template.format(instance=instance_name)
             self.file.write('    {0}\n'.format(text))

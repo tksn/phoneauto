@@ -9,6 +9,7 @@
 from __future__ import unicode_literals
 import sys
 import uiautomator
+from . import keycode
 
 
 def _quote(text):
@@ -90,16 +91,6 @@ class UiautomatorUiElement(object):
 class UiautomatorDevice(object):
     """Device class"""
 
-    KEYCODE = {
-        'KEYCODE_0': 7,
-        'KEYCODE_9': 16,
-        'KEYCODE_A': 29,
-        'KEYCODE_Z': 54,
-        'HOME': 3,
-        'BACK': 4,
-        'APP_SWITCH': 187
-    }
-
     def __init__(self, device_name=None):
         """Initialization
 
@@ -108,6 +99,7 @@ class UiautomatorDevice(object):
                 (what you see in adb devices outputs)
         """
         self._device = uiautomator.Device(device_name)
+        self._chars_to_keys = keycode.chars_to_keys_us
 
     def close(self):
         """Closes device"""
@@ -290,20 +282,21 @@ class UiautomatorDevice(object):
         uielement = self.find_class_element_contains(
             coord, class_name='android.widget.EditText')
         if uielement is None:
-            return
+            for k in self._chars_to_keys(keys):
+                self.press_key(k[0], meta=k[1], record=record)
         else:
             self.send_keys(uielement, keys, record=record)
 
-    def press_key(self, key_name, record=_null_record):
+    def press_key(self, key_name, meta=None, record=_null_record):
         """Press the key specified
 
         Args:
             key_name (text): the name of the key. ex)HOME, BACK, etc.
             record (function): optional record() for generating a script
         """
-        self._device.press(self.KEYCODE[key_name])
-        format_str = '{{instance}}.press({0})'
-        record(format_str.format(self.KEYCODE[key_name]))
+        kc = keycode.get_keycode(key_name)
+        self._device.press(kc, meta)
+        record('{{instance}}.press({0}, {1})'.format(kc, meta))
 
     def click(self, coord, record=_null_record):
         """Clicks on the coordinate specified
