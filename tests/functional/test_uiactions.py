@@ -131,8 +131,8 @@ def test_drag_xy(mocks, result_out):
         ('<B1-Motion>', (20, 30)),
         ('<ButtonRelease-1>', (30, 40))
     ))
-    mocks.device.swipe.assert_called_with(10, 20, 30, 40)
-    assert '.swipe(10, 20, 30, 40' in last_line(result_out)
+    mocks.device.drag.assert_called_with(10, 20, 30, 40)
+    assert '.drag(10, 20, 30, 40' in last_line(result_out)
 
 
 @mainloop_testfunc

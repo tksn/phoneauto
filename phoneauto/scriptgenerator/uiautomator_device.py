@@ -471,6 +471,19 @@ class UiautomatorDevice(object):
                 direction = 'down' if ydiff >= 0 else 'up'
             self.swipe_element(uielement, direction, record=record, **kwargs)
 
+    def drag(self, start, end, record=_null_record, **kwargs):
+        """Performs drag action from start point to end point
+
+        Args:
+            start (tuple): Start point coordinate (xS, yS)
+            end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
+            kwargs (dict): optional key-value pairs.  ex)steps=100
+        """
+        (xS, yS), (xE, yE) = start, end
+        self._device.drag(xS, yS, xE, yE, **kwargs)
+        record(_build_swipe_drag_str('drag', xS, yS, xE, yE, **kwargs))
+
     @staticmethod
     def drag_element(uielement, end, record=_null_record, **kwargs):
         """Performs drag action on the UI element to the end point
@@ -519,7 +532,7 @@ class UiautomatorDevice(object):
         """
         uielementS = self.find_element_contains(start)
         if uielementS is None:
-            self.swipe(start, end, record=record, **kwargs)
+            self.drag(start, end, record=record, **kwargs)
         elif not find_target_element:
             self.drag_element(uielementS, end, record=record, **kwargs)
         else:
