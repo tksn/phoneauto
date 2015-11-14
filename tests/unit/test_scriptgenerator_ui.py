@@ -7,8 +7,9 @@ from phoneauto.scriptgenerator import scriptgenerator_ui
 
 
 def create_scriptgenerator_ui():
-    controller = MagicMock()
-    return scriptgenerator_ui.ScriptGeneratorUI(controller)
+    ui = scriptgenerator_ui.ScriptGeneratorUI()
+    ui._controller = MagicMock()
+    return ui
 
 
 def test_acquire_screen(mocks):

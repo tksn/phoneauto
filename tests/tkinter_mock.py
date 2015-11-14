@@ -15,6 +15,9 @@ def install(monkeypatch):
     monkeypatch.setattr('tkinter.ttk.Frame', Frame)
     monkeypatch.setattr('tkinter.ttk.Button', Button)
     monkeypatch.setattr('tkinter.ttk.Entry', Entry)
+    monkeypatch.setattr('tkinter.ttk.Label', Label)
+    monkeypatch.setattr('tkinter.ttk.Scale', Scale)
+    monkeypatch.setattr('tkinter.StringVar', MagicMock)
     monkeypatch.setattr(
         'PIL.ImageTk.PhotoImage',
         create_autospec(PIL.ImageTk.PhotoImage))
@@ -56,6 +59,23 @@ class Tk(Widget):
 
     def title(self, title_str):
         pass
+
+    def update(self):
+        pass
+
+    def config(self, *args, **kwargs):
+        pass
+
+    def after(self, ms, after_func, *args):
+        def after_func_wrap():
+            after_func(*args)
+        self.after_func = after_func_wrap
+
+    def after_cancel(self, timer_id):
+        self.after_func = None
+
+    def execute_after_func(self):
+        self.after_func()
 
 
 class Toplevel(Widget):
@@ -112,11 +132,14 @@ class Canvas(Widget):
     def create_line(self, *args, **kwargs):
         pass
 
-    def create_oval(self, tx, ty, bx, by, outline, tag):
+    def create_oval(self, tx, ty, bx, by, outline, fill, tag):
         pass
 
     def execute_after_func(self):
         self.after_func()
+
+    def config(self, *args, **kwargs):
+        pass
 
 
 class Frame(Widget):
@@ -136,16 +159,38 @@ class Button(Widget):
         root.add_child(name, self)
         self.bind(None, command)
 
-    def grid(self, row, column, sticky):
+    def grid(self, row, column, sticky, rowspan=None):
         pass
 
 
 class Entry(Widget):
 
-    def __init__(self, root, name=None):
+    def __init__(self, root, name=None, textvariable=None):
+        Widget.__init__(self)
+        root.add_child(name, self)
+        self.textvariable = textvariable
+        self.get = MagicMock()
+
+    def grid(self, row, column, sticky):
+        pass
+
+
+class Scale(Widget):
+
+    def __init__(self, root, name=None, value=None):
         Widget.__init__(self)
         root.add_child(name, self)
         self.get = MagicMock()
+
+    def grid(self, row, column, sticky):
+        pass
+
+
+class Label(Widget):
+
+    def __init__(self, root, name=None, text=None):
+        Widget.__init__(self)
+        root.add_child(name, self)
 
     def grid(self, row, column, sticky):
         pass

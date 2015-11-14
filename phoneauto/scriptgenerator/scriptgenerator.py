@@ -90,11 +90,23 @@ class ScriptGenerator(object):
             position, keys, record=self.writer.get_recorder(device_index))
 
     def click(self, position, device_index=0):
-        """Clicks on the pixel or the element on the device
+        """Clicks on a pixel
 
         Args:
             position (tuple):
-                Coordinate (x, y) of the target pixel/element
+                Coordinate (x, y) of the target pixel
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].click(
+            position, record=self.writer.get_recorder(device_index))
+
+    def click_uielement(self, position, device_index=0):
+        """Clicks on a UI element
+
+        Args:
+            position (tuple):
+                Coordinate (x, y) of a pixel in the target element
             device_index (integer):
                 The index of the device
         """
@@ -102,11 +114,23 @@ class ScriptGenerator(object):
             position, record=self.writer.get_recorder(device_index))
 
     def long_click(self, position, device_index=0):
-        """Long-clicks on the pixel or the element on the device
+        """Long-clicks on a pixel
 
         Args:
             position (tuple):
-                Coordinate (x, y) of the target pixel/element
+                Coordinate (x, y) of the target pixel
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].long_click(
+            position, record=self.writer.get_recorder(device_index))
+
+    def long_click_uielement(self, position, device_index=0):
+        """Long-clicks on a element
+
+        Args:
+            position (tuple):
+                Coordinate (x, y) of the target element
             device_index (integer):
                 The index of the device
         """
@@ -119,13 +143,30 @@ class ScriptGenerator(object):
         Args:
             start (tuple):
                 Start point's coordinate (x, y) of the swipe action
-            emd (tuple):
+            end (tuple):
                 End point's coordinate (x, y) of the swipe action
             device_index (integer):
                 The index of the device
         """
         self.devices[device_index].swipe(
-            start, end, record=self.writer.get_recorder(device_index))
+            start, end, steps=10,
+            record=self.writer.get_recorder(device_index))
+
+    def swipe_uielement(self, start, end, device_index=0):
+        """Swipes a ui element on the device
+
+        Args:
+            start (tuple):
+                Start ui element's  coordinate (x, y)
+            end (tuple):
+                Destination coordinate (x, y) which is used to
+                determine swipe direction
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].find_swipe(
+            start, end, steps=10,
+            record=self.writer.get_recorder(device_index))
 
     def drag(self, start, end, device_index=0):
         """Performs drag-and-drop action on the device
@@ -133,90 +174,67 @@ class ScriptGenerator(object):
         Args:
             start (tuple):
                 Start point's coordinate (x, y) of the drag action
-            emd (tuple):
+            end (tuple):
                 End point's coordinate (x, y) of the drag action
             device_index (integer):
                 The index of the device
         """
         self.devices[device_index].find_drag(
-            start, end, record=self.writer.get_recorder(device_index))
+            start, end,
+            record=self.writer.get_recorder(device_index))
 
-    @staticmethod
-    def query_touch_action(event_chain):
-        """Queries if the event_chain can be handled by the device
-
-        Args:
-            event_chain (iterable):
-                Series of mouse events, which is defined as an iterable,
-                and consists tuple objects. Each tuple object represents event
-                and is defined as (event_name, coordinate)
-                where event_name is one of 'press', 'hold' and 'release',
-                and coordinate is the mouse position (x, y).
-        """
-        MOVE, NOMOVE = True, False
-        TOUCH_ACTION_PATTERNS = (
-            (('press', ('release', NOMOVE)), 'click'),
-            (('press', ('release', MOVE)), 'swipe'),
-            (('press', ('hold', NOMOVE), ('release', MOVE)), 'drag'),
-            (('press', ('hold', NOMOVE), ('release', NOMOVE)), 'long_click'),
-            (('press', ('hold', MOVE), ('release', NOMOVE)), 'swipe'))
-
-        def match_pattern(pattern_seq):
-            """Returns if the pattern_seq matches to
-            one of TOUCH_ACTION_PATTERNS
-            """
-            if len(pattern_seq) != len(event_chain):
-                return False
-            x0, y0 = event_chain[0]['coord']
-            it = iter(pattern_seq[1:])
-            for ev in event_chain[1:]:
-                x1, y1 = ev['coord']
-                moveflag = x0 != x1 or y0 != y1
-                pat_ev = next(it)
-                if ev['type'] != pat_ev[0] or moveflag != pat_ev[1]:
-                    return False
-            return True
-
-        for pattern_seq, pattern_act in TOUCH_ACTION_PATTERNS:
-            if match_pattern(pattern_seq):
-                return pattern_act
-        return None
-
-    def touch_action(self, event_chain, device_index=0):
-        """Performs touch action
+    def drag_to_other(self, start, end, device_index=0):
+        """Performs drag-and-drop action on the device
+        Drops the ui element on another ui element.
 
         Args:
-            event_chain (iterable):
-                Series of mouse events, which is defined as an iterable,
-                and consists tuple objects. Each tuple object represents event
-                and is defined as (event_name, coordinate)
-                where event_name is one of 'press', 'hold' and 'release',
-                and coordinate is the mouse position (x, y).
+            start (tuple):
+                Start point's coordinate (x, y) of the drag action
+            end (tuple):
+                End point's coordinate (x, y) of the drag action
+            device_index (integer):
+                The index of the device
         """
-        xy = event_chain[0]['coord']
-        xyS, xyE = event_chain[0]['coord'], event_chain[-1]['coord']
+        self.devices[device_index].find_drag(
+            start, end, find_target_element=True,
+            record=self.writer.get_recorder(device_index))
 
-        def click():
-            """Click command"""
-            return self.click(xy, device_index=device_index)
+    def pinch_in(self, position, percent, steps=10, device_index=0):
+        """Performs pinch-in (edge-to-center) action on the device
 
-        def long_click():
-            """Long-click command"""
-            return self.long_click(xy, device_index=device_index)
+        Args:
+            position (tuple):
+                coordinate (x, y) of the ui element which is to pinch-in'ed
+            percent (tuple):
+                percentage of the element's diagonal length
+                for the pinch gesture
+            steps (integer):
+                the number of steps for the gesture.
+                Steps are injected about 5 milliseconds apart,
+                so 100 steps may take around 0.5 seconds to complete.
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].pinch_in(
+            position, percent, steps=steps,
+            record=self.writer.get_recorder(device_index))
 
-        def swipe():
-            """Swipe command"""
-            return self.swipe(xyS, xyE, device_index=device_index)
+    def pinch_out(self, position, percent, steps=10, device_index=0):
+        """Performs pinch-out (center-to-edge) action on the device
 
-        def drag():
-            """Drag command"""
-            return self.drag(xyS, xyE, device_index=device_index)
-
-        command_table = {'click': click, 'long_click': long_click,
-                         'swipe': swipe, 'drag': drag}
-
-        action = self.query_touch_action(event_chain)
-        if action:
-            command_table[action]()
-            return
-        raise NotImplementedError()
+        Args:
+            position (tuple):
+                coordinate (x, y) of the ui element which is to pinch-out'ed
+            percent (tuple):
+                percentage of the element's diagonal length
+                for the pinch gesture
+            steps (integer):
+                the number of steps for the gesture.
+                Steps are injected about 5 milliseconds apart,
+                so 100 steps may take around 0.5 seconds to complete.
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].pinch_out(
+            position, percent, steps=steps,
+            record=self.writer.get_recorder(device_index))

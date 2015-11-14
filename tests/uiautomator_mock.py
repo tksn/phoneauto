@@ -13,23 +13,29 @@ def install(monkeypatch):
     DeviceMock = create_autospec(uiautomator.Device)
     device = DeviceMock()
     device.server = MagicMock()
+    device.server.start = MagicMock()
     device.screenshot.return_value=True
 
     screen_img = PIL.Image.new(
         mode='RGB', size=(_SCREEN_WIDTH, _SCREEN_HEIGHT))
-    img_open = MagicMock(return_value=screen_img)
+    orig_img_open = PIL.Image.open
+    def img_open_dispatch(*args, **kwargs):
+        if isinstance(args[0], type('')):
+            return screen_img
+        return orig_img_open(*args, **kwargs)
+    img_open = MagicMock(side_effect=img_open_dispatch)
     monkeypatch.setattr('uiautomator.Device', lambda _: device)
     monkeypatch.setattr('PIL.Image.open', img_open)
     return device
 
 
-def _bounds(t, l, b, r):
+def bounds(t, l, b, r):
     return {'top': t, 'left': l, 'bottom': b, 'right': r}
 
 
 def uia_element_info(**kwvalues):
     elem = {
-        'visibleBounds': _bounds(0, 0, _SCREEN_HEIGHT, _SCREEN_WIDTH),
+        'visibleBounds': bounds(0, 0, _SCREEN_HEIGHT, _SCREEN_WIDTH),
         'resourceName': '',
         'contentDescription': '',
         'text': '',

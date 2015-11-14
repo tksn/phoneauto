@@ -4,6 +4,7 @@
 :copyright: (c) 2015 by tksn
 :license: MIT
 """
+# pylint: disable=invalid-name
 
 from __future__ import unicode_literals
 import codecs
@@ -17,7 +18,7 @@ from phoneauto.scriptgenerator.scriptgenerator_ui import ScriptGeneratorUI
 from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
 
 
-def scriptgenerator_main(result_out=None, scale=0.3):
+def scriptgenerator_main(result_out=None, scale=0.3, platform=None):
     """Launches scriptgenerator GUI application
 
     Args:
@@ -37,12 +38,13 @@ def scriptgenerator_main(result_out=None, scale=0.3):
     else:
         outfile = codecs.getwriter('utf-8')(result_out)
 
+    ui = ScriptGeneratorUI(scale=scale, platform_sys=platform)
     device = UiautomatorDevice()
     writer = PytestScriptWriter(outfile, [device])
 
     writer.start()
     controller = ScriptGenerator([device], writer)
-    ScriptGeneratorUI(controller, scale=scale).run()
+    ui.run(controller)
     writer.finish()
 
     device.close()
