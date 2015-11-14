@@ -7,6 +7,7 @@
 # pylint: disable=invalid-name
 
 from __future__ import unicode_literals
+import math
 import sys
 import uiautomator
 from . import keycode
@@ -153,6 +154,8 @@ class UiElement(object):
 class UiautomatorDevice(object):
     """Device class"""
 
+    _FIND_ELEMENT_DISTANCE_THRESH = 200
+
     def __init__(self, device_name=None):
         """Initialization
 
@@ -257,7 +260,11 @@ class UiautomatorDevice(object):
 
         def xy_in_rect(r):
             """Check xy is in rect r"""
-            return r[L] <= x < r[R] and r[T] <= y < r[B]
+            if x < r[L] or r[R] <= x or y < r[T] or r[B] <= y:
+                return False
+            r_x, r_y = r[L] + (r[R] - r[L]) / 2, r[T] + (r[B] - r[T]) / 2
+            distance = math.hypot(x - r_x, y - r_y)
+            return distance < self._FIND_ELEMENT_DISTANCE_THRESH
 
         def rect_area(r):
             """Returns area of rect r"""
