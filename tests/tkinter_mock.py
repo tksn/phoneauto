@@ -56,6 +56,7 @@ class Tk(Widget):
     def __init__(self):
         Widget.__init__(self)
         self.mainloop = MagicMock()
+        self.after_func = None
 
     def title(self, title_str):
         pass
@@ -74,8 +75,9 @@ class Tk(Widget):
     def after_cancel(self, timer_id):
         self.after_func = None
 
-    def execute_after_func(self):
-        self.after_func()
+    def process_after_func(self):
+        if self.after_func is not None:
+            self.after_func()
 
 
 class Toplevel(Widget):
@@ -154,10 +156,16 @@ class Frame(Widget):
 
 class Button(Widget):
 
-    def __init__(self, root, text, command, name):
+    def __init__(self, root, text, command=None, name=''):
         Widget.__init__(self)
         root.add_child(name, self)
-        self.bind(None, command)
+        if command:
+            self.config(command=command)
+
+    def config(self, *args, **kwargs):
+        command_func = kwargs.get('command')
+        if command_func:
+            self.bind(None, command_func)
 
     def grid(self, row, column, sticky, rowspan=None):
         pass

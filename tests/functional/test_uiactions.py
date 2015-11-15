@@ -51,6 +51,30 @@ def mouse_events(mocks, events):
             canvas.process_event(ev_name, ev_arg)
 
 
+def user_input(target_widget, event_name, **kwargs):
+    input_item = {
+        'widget': target_widget,
+        'name': event_name
+    }
+    input_item.update(kwargs)
+    return input_item
+
+
+def perform_user_input(mocks, events):
+    class _Object(object): pass
+    for event in events:
+        widget = mocks.uiroot.nametowidget(event['widget'])
+        coord = event.get('coord')
+        if coord:
+            ev_arg = _Object()
+            ev_arg.x, ev_arg.y = coord
+            ev_arg.x_root, ev_arg.y_root = 0, 0 # not used in tests
+            widget.process_event(event['name'], ev_arg)
+        else:
+            widget.process_event(event['name'])
+    mocks.uiroot.process_after_func()
+
+
 def set_element_find_result(mocks, **uia_attr):
     elem = MagicMock()
     elem.info = uia_element_info(**uia_attr)
@@ -87,131 +111,117 @@ def test_recent_apps(mocks, result_out):
 
 @mainloop_testfunc
 def test_click_xy(mocks, result_out):
-    # left down-up is translated to click with coordinate
-    mouse_events(mocks, (
-        ('<Button-1>', (10, 20)),
-        ('<ButtonRelease-1>', (10, 20))
-    ))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(10, 20)),
+        user_input('menu', 'Click(xy)')
+    ])
     mocks.device.click.assert_called_with(10, 20)
     assert '.click(10, 20)' in last_line(result_out)
 
 
 @mainloop_testfunc
 def test_long_click_xy(mocks, result_out):
-    # left down-hold-up is translated to long click with coordinate
-    mouse_events(mocks, (
-        ('<Button-1>', (10, 20)),
-        ('##EXEC_AFTER', None),
-        ('<ButtonRelease-1>', (10, 20))
-    ))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(10, 20)),
+        user_input('menu', 'Long click(xy)')
+    ])
     mocks.device.long_click.assert_called_with(10, 20)
     assert '.long_click(10, 20)' in last_line(result_out)
 
 
 @mainloop_testfunc
-def test_swipe_xy(mocks, result_out):
-    # left down-move-up is translated to swipe with coordinate
-    mouse_events(mocks, (
-        ('<Button-1>', (10, 20)),
-        ('<B1-Motion>', (20, 30)),
-        ('<ButtonRelease-1>', (30, 40))
-    ))
+def test_swipe_xy_to_xy(mocks, result_out):
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<B1-Motion>', coord=(20, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(30, 40)),
+        user_input('menu', 'Swipe(xy -> xy)')
+    ])
     mocks.device.swipe.assert_called_with(10, 20, 30, 40, steps=10)
     assert '.swipe(10, 20, 30, 40' in last_line(result_out)
 
 
 @mainloop_testfunc
-def test_drag_xy(mocks, result_out):
-    # left down-hold-move-up is translated to drag with
-    #   start=uielement, end=coordinate
-    # but becomes swipe if no ui element found on start position
-    mouse_events(mocks, (
-        ('<Button-1>', (10, 20)),
-        ('##EXEC_AFTER', None),
-        ('<B1-Motion>', (20, 30)),
-        ('<ButtonRelease-1>', (30, 40))
-    ))
+def test_drag_xy_to_xy(mocks, result_out):
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<B1-Motion>', coord=(20, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(30, 40)),
+        user_input('menu', 'Drag(xy -> xy)')
+    ])
     mocks.device.drag.assert_called_with(10, 20, 30, 40)
     assert '.drag(10, 20, 30, 40' in last_line(result_out)
 
 
 @mainloop_testfunc
-def test_drag_element(mocks, result_out):
-    # left down-hold-move-up is translated to drag with
-    #   start=uielement, end=coordinate
-    elem = set_element_find_result(
-        mocks, visibleBounds=bounds(20, 10, 21, 11), resourceName='abc')
-    mouse_events(mocks, (
-        ('<Button-1>', (10, 20)),
-        ('##EXEC_AFTER', None),
-        ('<B1-Motion>', (20, 30)),
-        ('<ButtonRelease-1>', (30, 40))
-    ))
+def test_drag_object_to_xy(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<B1-Motion>', coord=(20, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(30, 40)),
+        user_input('menu', 'Drag(object -> xy)')
+    ])
     elem.drag.to.assert_called_with(30, 40)
     assert '.drag.to(30, 40' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_fling_vertical_forward(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 50)),
+        user_input('mainframe.canvas', '<B1-Motion>', coord=(10, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(10, 10)),
+        user_input('menu', 'Fling')
+    ])
+    elem.fling.vert.forward.assert_called_with()
+    assert '.fling.vert.forward()' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_scroll_horizontal_backward(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-1>', coord=(10, 10)),
+        user_input('mainframe.canvas', '<B1-Motion>', coord=(30, 10)),
+        user_input('mainframe.canvas', '<ButtonRelease-1>', coord=(50, 10)),
+        user_input('menu', 'Scroll')
+    ])
+    elem.scroll.horiz.backward.assert_called_with()
+    assert '.scroll.horiz.backward()' in last_line(result_out)
 
 
 # Mouse right button click actions
 
 @mainloop_testfunc
-def test_swipe_element(mocks, result_out):
-    # right down-move-up is translated to swipe with ui element
+def test_click_object(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
-    mouse_events(mocks, (
-        ('<Button-2>', (10, 20)),
-        ('<B2-Motion>', (30, 30)),
-        ('<ButtonRelease-2>', (50, 40))
-    ))
-    elem.swipe.assert_called_with('right', steps=10)
-    assert '.swipe(\'right\'' in last_line(result_out)
-
-
-@mainloop_testfunc
-def test_drag_element_to_element(mocks, result_out):
-    # right down-hold-move-up is translated to drag with
-    #   start=uielement, end=uielement
-    elem = set_element_find_result(mocks, resourceName='abc')
-    mouse_events(mocks, (
-        ('<Button-2>', (10, 20)),
-        ('##EXEC_AFTER', None),
-        ('<B2-Motion>', (20, 30)),
-        ('<ButtonRelease-2>', (30, 40))
-    ))
-    elem.drag.to.assert_called_with(resourceId='abc')
-    assert '.drag.to(resourceId=\'abc\'' in last_line(result_out)
-
-
-# Mouse right button click menu commands
-
-def execute_rightclickmenu_command(mocks, command_tag, position):
-    mouse_events(mocks, (
-        ('<Button-2>', position),
-        ('<ButtonRelease-2>', position),
-    ))
-    menu = mocks.uiroot.nametowidget('menu')
-    menu.process_event(command_tag)
-
-
-@mainloop_testfunc
-def test_click_element(mocks, result_out):
-    # right click menu - click
-    elem = set_element_find_result(mocks, resourceName='abc')
-    execute_rightclickmenu_command(mocks, 'Click', (10, 20))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Click(object)')
+    ])
     elem.click.assert_called_with()
-    assert '.click' in last_line(result_out)
+    assert '.click()' in last_line(result_out)
 
 
 @mainloop_testfunc
-def test_long_click_element(mocks, result_out):
-    # right click menu - long click
+def test_long_click_object(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
-    execute_rightclickmenu_command(mocks, 'Long click', (10, 20))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Long click(object)')
+    ])
     elem.long_click.assert_called_with()
-    assert '.long_click' in last_line(result_out)
+    assert '.long_click()' in last_line(result_out)
 
 
-def textentrywindow_set_text_entry(textentrywindow, text):
-    textentry = textentrywindow.nametowidget('textentry')
+def dialog_set_text_entry(dialog, text):
+    textentry = dialog.nametowidget('textentry')
     textentry.get.return_value = text
 
 
@@ -220,60 +230,76 @@ def dialog_click_ok(dialog):
     ok_button.process_event(None)
 
 
+def set_dialog_action(mocks, widget_name, action_func):
+    canvas = mocks.uiroot.nametowidget(widget_name)
+    canvas.wait_window.side_effect = action_func
+
+
 @mainloop_testfunc
-def test_enter_text_element(mocks, result_out):
+def test_enter_text_on_object(mocks, result_out):
+
+    def actions_when_dialog_displayed(dialog):
+        dialog_set_text_entry(dialog, 'ABCDEF')
+        dialog_click_ok(dialog)
+
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_dialog_displayed)
+
     elem = set_element_find_result(mocks, resourceName='abc')
-
-    def actions_when_textentrywindow_displayed(textentrywindow):
-        textentrywindow_set_text_entry(textentrywindow, 'ABCDEF')
-        dialog_click_ok(textentrywindow)
-
-    canvas = mocks.uiroot.nametowidget('mainframe.canvas')
-    canvas.wait_window.side_effect = actions_when_textentrywindow_displayed
-
-    execute_rightclickmenu_command(mocks, 'Enter text', (10, 20))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Enter text')
+    ])
 
     elem.set_text.assert_called_with('ABCDEF')
     assert '.set_text(\'ABCDEF\')' in last_line(result_out)
 
 
 @mainloop_testfunc
-def test_enter_text_nonelement(mocks, result_out):
+def test_enter_text_without_object(mocks, result_out):
 
-    def actions_when_textentrywindow_displayed(textentrywindow):
-        textentrywindow_set_text_entry(textentrywindow, 'aB')
-        dialog_click_ok(textentrywindow)
+    def actions_when_dialog_displayed(dialog):
+        dialog_set_text_entry(dialog, 'aB')
+        dialog_click_ok(dialog)
 
-    canvas = mocks.uiroot.nametowidget('mainframe.canvas')
-    canvas.wait_window.side_effect = actions_when_textentrywindow_displayed
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_dialog_displayed)
 
-    execute_rightclickmenu_command(mocks, 'Enter text', (10, 20))
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Enter text')
+    ])
 
     mocks.device.press.assert_has_calls([
         call(29, None), call(30, 1)])
     assert '.press(30, 1)'.format() in last_line(result_out)
 
 
-def pinchwindow_set(pinchwindow, percent, steps):
-    slider = pinchwindow.nametowidget('pinchinslider')
+def pinchdialog_set(dialog, percent, steps):
+    slider = dialog.nametowidget('pinchinslider')
     slider.get.return_value = percent
-    entry = pinchwindow.nametowidget('steps')
+    entry = dialog.nametowidget('steps')
     entry.textvariable.get.return_value = steps
 
 
 @mainloop_testfunc
-def test_pinch_in_element(mocks, result_out):
+def test_pinch_in(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
 
-    def actions_when_pinchwindow_displayed(pinchwindow):
-        pinchwindow_set(pinchwindow, 0.5, 5)
-        dialog_click_ok(pinchwindow)
+    def actions_when_pinchdialog_displayed(pinchdialog):
+        pinchdialog_set(pinchdialog, 0.5, 5)
+        dialog_click_ok(pinchdialog)
 
-    canvas = mocks.uiroot.nametowidget('mainframe.canvas')
-    canvas.wait_window.side_effect = actions_when_pinchwindow_displayed
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_pinchdialog_displayed)
 
-    execute_rightclickmenu_command(mocks, 'Pinch in', (10, 20))
-    mocks.uiroot.execute_after_func()
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Pinch in')
+    ])
 
     elem.pinch.In.assert_called_with(percent=50, steps=5)
     last_line_str = last_line(result_out)
@@ -283,21 +309,97 @@ def test_pinch_in_element(mocks, result_out):
 
 
 @mainloop_testfunc
-def test_pinch_out_element(mocks, result_out):
+def test_pinch_out(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
 
-    def actions_when_pinchwindow_displayed(pinchwindow):
-        pinchwindow_set(pinchwindow, 0.5, 5)
-        dialog_click_ok(pinchwindow)
+    def actions_when_pinchdialog_displayed(pinchdialog):
+        pinchdialog_set(pinchdialog, 0.5, 5)
+        dialog_click_ok(pinchdialog)
 
-    canvas = mocks.uiroot.nametowidget('mainframe.canvas')
-    canvas.wait_window.side_effect = actions_when_pinchwindow_displayed
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_pinchdialog_displayed)
 
-    execute_rightclickmenu_command(mocks, 'Pinch out', (10, 20))
-    mocks.uiroot.execute_after_func()
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Pinch out')
+    ])
 
     elem.pinch.Out.assert_called_with(percent=50, steps=5)
     last_line_str = last_line(result_out)
     assert '.pinch.Out(' in last_line_str
     assert 'percent=50' in last_line_str
     assert 'steps=5' in last_line_str
+
+
+@mainloop_testfunc
+def test_swipe_object_with_direction(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(50, 10)),
+        user_input('mainframe.canvas', '<B2-Motion>', coord=(30, 10)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 10)),
+        user_input('menu', 'Swipe(object + direction)')
+    ])
+    elem.swipe.assert_called_with('left')
+    assert '.swipe(\'left\'' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_drag_object_to_object(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<B2-Motion>', coord=(20, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(30, 40)),
+        user_input('menu', 'Drag(object -> object)')
+    ])
+    elem.drag.to.assert_called_with(resourceId='abc')
+    assert '.drag.to(resourceId=\'abc\'' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_fling_vertical_to_beginning(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 10)),
+        user_input('mainframe.canvas', '<B2-Motion>', coord=(10, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 50)),
+        user_input('menu', 'Fling to end')
+    ])
+    elem.fling.vert.toBeginning.assert_called_with()
+    assert '.fling.vert.toBeginning()' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_scroll_horizontal_to_end(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(50, 10)),
+        user_input('mainframe.canvas', '<B2-Motion>', coord=(30, 10)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 10)),
+        user_input('menu', 'Scroll to end')
+    ])
+    elem.scroll.horiz.toEnd.assert_called_with()
+    assert '.scroll.horiz.toEnd()' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_scroll_vertical_to_text(mocks, result_out):
+
+    def actions_when_dialog_displayed(dialog):
+        dialog_set_text_entry(dialog, 'defgh')
+        dialog_click_ok(dialog)
+
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_dialog_displayed)
+
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 10)),
+        user_input('mainframe.canvas', '<B2-Motion>', coord=(10, 30)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 50)),
+        user_input('menu', 'Scroll to text')
+    ])
+    elem.scroll.vert.to.assert_called_with(text='defgh')
+    assert '.scroll.vert.to(text=\'defgh\')' in last_line(result_out)

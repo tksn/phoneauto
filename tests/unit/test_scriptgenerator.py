@@ -17,3 +17,14 @@ def test_get_screenshot(mocks):
     g = create_scriptgenerator()
     g.devices[0].get_screenshot_as_file.return_value = False
     assert g.get_screenshot() is None
+
+
+def test_swipe_object_with_horiz_direction(mocks):
+    g = create_scriptgenerator()
+    g.swipe_object_with_direction({
+        'start': (0, 0), 'end': (0, 30)
+    })
+    call_args = g.devices[0].swipe_object.call_args
+    args, kwargs = call_args
+    assert (0, 0) in args
+    assert 'down' in args

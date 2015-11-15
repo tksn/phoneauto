@@ -108,47 +108,94 @@ class UiElement(object):
         """
         self._impl.set_text(keys)
 
-    def click(self):
+    def click(self, record=_null_record):
         """Clicks on this element on the device"""
         self._impl.click()
+        record('{0}.click()'.format(self))
 
-    def long_click(self):
+    def long_click(self, record=_null_record):
         """Long-clicks on this element on the device"""
         self._impl.long_click()
+        record('{0}.long_click()'.format(self))
 
-    def swipe(self, direction, **kwargs):
-        """Performs swipe operation on this element on the device
+    def drag_to_xy(self, x, y, record=_null_record, **options):
+        """Drags this object to (x, y)
+
+        Args:
+            x (integer): Destination coordinate x
+            y (integer): Destination coordinate y
+            options (dict): Keyword arguments passed to uiautomator's drag.to
+        """
+        self._impl.drag.to(x, y, **options)
+        method_name = '{0}.drag.to'.format(self)
+        record(_build_method_call_str(method_name, *(x, y), **options))
+
+    def drag_to_object(self, other, record=_null_record, **options):
+        """Drags this object to another object
+
+        Args:
+            other (object): Destination object
+            options (dict): Keyword arguments passed to uiautomator's drag.to
+        """
+        drag_kwargs = dict(other.selector_kwargs)
+        drag_kwargs.update(options)
+        self._impl.drag.to(**drag_kwargs)
+        method_call_str = _build_method_call_str(
+            '{0}.drag.to'.format(self),
+            *other.selector_args, **drag_kwargs)
+        record(method_call_str)
+
+    def swipe(self, direction, record=_null_record, **options):
+        """Swipes this object to the specified direction
 
         Args:
             direction: 'right', 'left', 'up' or 'down'
-            kwargs (dict): Keyword arguments passed to uiautomator's swipe
+            options (dict): Keyword arguments passed to uiautomator's swipe
         """
-        self._impl.swipe(direction, **kwargs)
+        self._impl.swipe(direction, **options)
+        method_call_str = _build_method_call_str(
+            '{0}.swipe'.format(self), direction, **options)
+        record(method_call_str)
 
-    def drag_to(self, *args, **kwargs):
-        """Performs drag and drop operation on this element on the device
+    def pinch(self, in_or_out, record=_null_record, **options):
+        """Performs pinch-in/out operation on this object
 
         Args:
-            args (list): Arguments passed to uiautomator's drag.to
-            kwargs (dict): Keyword arguments passed to uiautomator's drag.to
+            in_or_out (text): 'In' or 'Out'
+            options (dict): Keyword arguments passed to uiautomator's pinch
         """
-        self._impl.drag.to(*args, **kwargs)
+        call_method = getattr(self._impl.pinch, in_or_out)
+        call_method(**options)
+        method_call_str = _build_method_call_str(
+            '{0}.pinch.{1}'.format(self, in_or_out), **options)
+        record(method_call_str)
 
-    def pinch_in(self, **kwargs):
-        """Performs pinch-in operation on this element on the device
+    def fling(self, orientation, action, record=_null_record, **kwargs):
+        """Performs fling action on a scrollable element on the device
 
         Args:
-            kwargs (dict): Keyword arguments passed to uiautomator's pinch.In
+            orientation (text): 'horizontal' or 'vertical'
+            action (text): 'forward', 'backward', 'toBeginning' or 'toEnd'
+            kwargs (dict): Keyword arguments passed to uiautomator's fling
         """
-        self._impl.pinch.In(**kwargs)
+        call_method = getattr(getattr(self._impl.fling, orientation), action)
+        call_method(**kwargs)
+        method_name = '{0}.fling.{1}.{2}'.format(self, orientation, action)
+        record(_build_method_call_str(method_name, **kwargs))
 
-    def pinch_out(self, **kwargs):
-        """Performs pinch-out operation on this element on the device
+    def scroll(self, orientation, action, record=_null_record, **kwargs):
+        """Performs scroll action on a scrollable element on the device
 
         Args:
-            kwargs (dict): Keyword arguments passed to uiautomator's pinch.Out
+            orientation (text): 'horizontal' or 'vertical'
+            action (text):
+                'forward', 'backward', 'toBeginning', 'toEnd' or 'to'
+            kwargs (dict): Keyword arguments passed to uiautomator's scroll
         """
-        self._impl.pinch.Out(**kwargs)
+        call_method = getattr(getattr(self._impl.scroll, orientation), action)
+        call_method(**kwargs)
+        method_name = '{0}.scroll.{1}.{2}'.format(self, orientation, action)
+        record(_build_method_call_str(method_name, **kwargs))
 
 
 class UiautomatorDevice(object):
@@ -203,39 +250,6 @@ class UiautomatorDevice(object):
         """
         return ['pass']
 
-    def find_clickable_element_contains(self, coord):
-        """Finds the clickable element which contains given coordinate
-
-        Args:
-            coord (tuple): coordinate (x, y)
-        Returns:
-            element (object): UI element object
-        """
-        criteria = {'clickable': True, 'enabled': True}
-        return self.find_element_contains(coord, **criteria)
-
-    def find_long_clickable_element_contains(self, coord):
-        """Finds the long-clickable element which contains given coordinate
-
-        Args:
-            coord (tuple): coordinate (x, y)
-        Returns:
-            element (object): UI element object
-        """
-        criteria = {'longClickable': True, 'enabled': True}
-        return self.find_element_contains(coord, **criteria)
-
-    def find_class_element_contains(self, coord, class_name):
-        """Finds the element which contains given coordinate and class name
-
-        Args:
-            coord (tuple): coordinate (x, y)
-        Returns:
-            element (object): UI element object
-        """
-        criteria = {'className': class_name}
-        return self.find_element_contains(coord, **criteria)
-
     def find_element_contains(self, coord, **criteria):
         """Finds the element which contains given coordinate and
         meets given criteria
@@ -246,12 +260,17 @@ class UiautomatorDevice(object):
         Returns:
             element (object): UI element object
         """
-        element = self._get_element_contains(coord, criteria)
+        uia_criteria = dict(criteria)
+        ignore_distant_element = uia_criteria.pop(
+            'ignore_distant_element', True)
+        element = self._get_element_contains(coord, uia_criteria,
+                                             ignore_distant_element)
         if not element:
             return None
-        return self._create_element_obj(element, criteria)
+        return self._create_element_obj(element, uia_criteria)
 
-    def _get_element_contains(self, coord, criteria):
+    def _get_element_contains(self, coord, criteria,
+                              ignore_distant_element):
         """Returns the information of element which contains given
         coordinate and meets given criteria
         """
@@ -262,9 +281,11 @@ class UiautomatorDevice(object):
             """Check xy is in rect r"""
             if x < r[L] or r[R] <= x or y < r[T] or r[B] <= y:
                 return False
-            r_x, r_y = r[L] + (r[R] - r[L]) / 2, r[T] + (r[B] - r[T]) / 2
-            distance = math.hypot(x - r_x, y - r_y)
-            return distance < self._FIND_ELEMENT_DISTANCE_THRESH
+            if ignore_distant_element:
+                r_x, r_y = r[L] + (r[R] - r[L]) / 2, r[T] + (r[B] - r[T]) / 2
+                distance = math.hypot(x - r_x, y - r_y)
+                return distance < self._FIND_ELEMENT_DISTANCE_THRESH
+            return True
 
         def rect_area(r):
             """Returns area of rect r"""
@@ -340,8 +361,8 @@ class UiautomatorDevice(object):
             keys (text): The keys to be sent
             record (function): optional record() for generating a script
         """
-        uielement = self.find_class_element_contains(
-            coord, class_name='android.widget.EditText')
+        uielement = self.find_element_contains(
+            coord, className='android.widget.EditText')
         if uielement is None:
             for k in self._chars_to_keys(keys):
                 self.press_key(k[0], meta=k[1], record=record)
@@ -359,8 +380,8 @@ class UiautomatorDevice(object):
         self._device.press(kc, meta)
         record('{{instance}}.press({0}, {1})'.format(kc, meta))
 
-    def click(self, coord, record=_null_record):
-        """Clicks on the coordinate specified
+    def click_xy(self, coord, record=_null_record):
+        """Clicks on a coordinate
 
         Args:
             coord (tuple): Coordinate (x, y)
@@ -369,32 +390,19 @@ class UiautomatorDevice(object):
         self._device.click(*coord)
         record('{{instance}}.click({0}, {1})'.format(*coord))
 
-    @staticmethod
-    def click_element(uielement, record=_null_record):
-        """Clicks on the UI element specified
-
-        Args:
-            uielement (object): The target UI element object
-            record (function): optional record() for generating a script
-        """
-        uielement.click()
-        record('{0}.click()'.format(uielement))
-
-    def find_click(self, coord, record=_null_record):
-        """Find the best method to click on the coordinate and executes click
+    def click_object(self, coord, record=_null_record):
+        """Clicks on a object which contains the specified coordinate
 
         Args:
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = self.find_clickable_element_contains(coord)
-        if uielement is None:
-            self.click(coord, record=record)
-        else:
-            self.click_element(uielement, record=record)
+        uielement = self.find_element_contains(coord,
+                                               clickable=True, enabled=True)
+        uielement.click(record=record)
 
-    def long_click(self, coord, record=_null_record):
-        """Long-clicks on the coordinate specified
+    def long_click_xy(self, coord, record=_null_record):
+        """Long-clicks on a coordinate
 
         Args:
             coord (tuple): Coordinate (x, y)
@@ -403,32 +411,65 @@ class UiautomatorDevice(object):
         self._device.long_click(*coord)
         record('{{instance}}.long_click({0}, {1})'.format(*coord))
 
-    @staticmethod
-    def long_click_element(uielement, record=_null_record):
-        """Long-clicks on the UI element specified
-
-        Args:
-            uielement (object): The target UI element object
-            record (function): optional record() for generating a script
-        """
-        uielement.long_click()
-        record('{0}.long_click()'.format(uielement))
-
-    def find_long_click(self, coord, record=_null_record):
-        """Find the best method to long-click on the coordinate and
-        executes long-click
+    def long_click_object(self, coord, record=_null_record):
+        """Long-clicks on a object which contains the specified coordinate
 
         Args:
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = self.find_long_clickable_element_contains(coord)
-        if uielement is None:
-            self.long_click(coord, record=record)
-        else:
-            self.long_click_element(uielement, record=record)
+        uielement = self.find_element_contains(coord,
+                                               longClickable=True,
+                                               enabled=True)
+        if uielement is not None:
+            uielement.long_click(record=record)
 
-    def swipe(self, start, end, record=_null_record, **kwargs):
+    def drag_xy_to_xy(self, start, end, record=_null_record, **options):
+        """Performs drag action from start point to end point
+
+        Args:
+            start (tuple): Start point coordinate (xS, yS)
+            end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
+            options (dict): optional key-value pairs.  ex)steps=100
+        """
+        (xS, yS), (xE, yE) = start, end
+        self._device.drag(xS, yS, xE, yE, **options)
+        record(_build_swipe_drag_str('drag', xS, yS, xE, yE, **options))
+
+    def drag_object_to_xy(self, start, end,
+                          record=_null_record, **options):
+        """Drags an object which locates 'start'
+        to other location which coordinates are 'end'
+
+        Args:
+            start (tuple): The coordinate (xS, yS) of the object to drag
+            end (tuple): End point coordinate (xE, yE)
+            record (function): optional record() for generating a script
+            options (dict): optional key-value pairs.  ex)steps=100
+        """
+        uielementS = self.find_element_contains(start)
+        if uielementS is not None:
+            uielementS.drag_to_xy(*end, record=record, **options)
+
+    def drag_object_to_object(self, start, end,
+                              record=_null_record, **options):
+        """Drags an object which locates 'start'
+        onto another object which locates 'end'
+
+        Args:
+            start (tuple): The coordinate (xS, yS) of the object to drag
+            end (tuple): The coordinate (xS, yS) of the destination object
+            record (function): optional record() for generating a script
+            options (dict): optional key-value pairs.  ex)steps=100
+        """
+        uielementS = self.find_element_contains(start)
+        if uielementS is not None:
+            uielementE = self.find_element_contains(end)
+            if uielementE is not None:
+                uielementS.drag_to_object(uielementE, record=record, **options)
+
+    def swipe(self, start, end, record=_null_record, **options):
         """Performs swipe action from start point to end point
 
         Args:
@@ -438,154 +479,107 @@ class UiautomatorDevice(object):
             kwargs (dict): optional key-value pairs.  ex)steps=100
         """
         (xS, yS), (xE, yE) = start, end
-        self._device.swipe(xS, yS, xE, yE, **kwargs)
-        record(_build_swipe_drag_str('swipe', xS, yS, xE, yE, **kwargs))
+        self._device.swipe(xS, yS, xE, yE, **options)
+        record(_build_swipe_drag_str('swipe', xS, yS, xE, yE, **options))
 
-    @staticmethod
-    def swipe_element(uielement, direction,
-                      record=_null_record, **kwargs):
-        """Performs swipe action on the UI element
-
-        Args:
-            uielement (object): the object to swipe
-            direct (text): swipe direction ('right', 'left', 'up', 'down')
-            record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
-        """
-        uielement.swipe(direction, **kwargs)
-        method_call_str = _build_method_call_str(
-            '{0}.swipe'.format(uielement), direction, **kwargs)
-        record(method_call_str)
-
-    def find_swipe(self, start, end, record=_null_record, **kwargs):
-        """Finds the best method to swipe the ui element specified by
-        its coordinate, then executes the swipe.
-
-        Args:
-            start (tuple): Start point coordinate (x, y)
-            end (tuple): End point coordinate (x, y)
-            record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
-        """
-        uielement = self.find_element_contains(start)
-        if uielement is None:
-            self.swipe(start, end, record=record, **kwargs)
-        else:
-            xdiff, ydiff = end[0] - start[0], end[1] - start[1]
-            if abs(xdiff) > abs(ydiff):
-                direction = 'right' if xdiff >= 0 else 'left'
-            else:
-                direction = 'down' if ydiff >= 0 else 'up'
-            self.swipe_element(uielement, direction, record=record, **kwargs)
-
-    def drag(self, start, end, record=_null_record, **kwargs):
-        """Performs drag action from start point to end point
+    def swipe_object(self, start, direction, record=_null_record, **options):
+        """Swipes an object which locates 'start'
+         to the specified direction
 
         Args:
             start (tuple): Start point coordinate (xS, yS)
-            end (tuple): End point coordinate (xE, yE)
+            direction (text): 'right', 'left', 'up' or 'down'
             record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
+            options (dict): optional key-value pairs.  ex)steps=100
         """
-        (xS, yS), (xE, yE) = start, end
-        self._device.drag(xS, yS, xE, yE, **kwargs)
-        record(_build_swipe_drag_str('drag', xS, yS, xE, yE, **kwargs))
+        uielement = self.find_element_contains(start,
+                                               scrollable=True,
+                                               ignore_distant_element=False)
+        if uielement is not None:
+            uielement.swipe(direction, record=record, **options)
 
-    @staticmethod
-    def drag_element(uielement, end, record=_null_record, **kwargs):
-        """Performs drag action on the UI element to the end point
+    def pinch(self, in_or_out, coord, percent, record=_null_record, **options):
+        """Performs pinch action on the object locates on coord
 
         Args:
-            uielement (object): the object to drag
-            end (tuple): End point coordinate (xE, yE)
-            record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
-        """
-        xE, yE = end
-        uielement.drag_to(xE, yE, **kwargs)
-        method_call_str = _build_method_call_str(
-            '{0}.drag.to'.format(uielement), xE, yE, **kwargs)
-        record(method_call_str)
-
-    @staticmethod
-    def drag_element_to_element(uielementS, uielementE,
-                                record=_null_record, **kwargs):
-        """Drags an UI element oto another UI element
-
-        Args:
-            uielementS (object): the object to drag
-            uielementE (object): destination element
-            record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
-        """
-        drag_kwargs = dict(uielementE.selector_kwargs)
-        drag_kwargs.update(kwargs)
-        uielementS.drag_to(*uielementE.selector_args, **drag_kwargs)
-        method_call_str = _build_method_call_str(
-            '{0}.drag.to'.format(uielementS),
-            *uielementE.selector_args, **drag_kwargs)
-        record(method_call_str)
-
-    def find_drag(self, start, end, find_target_element=False,
-                  record=_null_record, **kwargs):
-        """Finds the best method to drag the ui element specified by
-        its coordinate, then executes the drag.
-
-        Args:
-            start (tuple): Start point coordinate (x, y)
-            end (tuple): End point coordinate (x, y)
-            record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
-        """
-        uielementS = self.find_element_contains(start)
-        if uielementS is None:
-            self.drag(start, end, record=record, **kwargs)
-        elif not find_target_element:
-            self.drag_element(uielementS, end, record=record, **kwargs)
-        else:
-            uielementE = self.find_element_contains(end)
-            if uielementE is None:
-                self.drag_element(uielementS, end, record=record, **kwargs)
-            else:
-                self.drag_element_to_element(
-                    uielementS, uielementE, record=record, **kwargs)
-
-    def pinch_in(self, coord, percent, record=_null_record, **kwargs):
-        """Performs pinch-in(edge-to-center) touch action
-
-        Args:
+            in_or_out (text):
+                'In': Pinch-in (edge to center pinch)
+                'Out': Pinch-in (center to edge pinch)
             coord (tuple):
-                (x, y) coordinate which is contained in the ui element
+                (x, y) coordinate which is contained in the object
             percent (integer):
                 percentage of the element's diagonal length
                 for the pinch gesture
             record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
+            options (dict): optional key-value pairs.  ex)steps=100
         """
         uielement = self.find_element_contains(
             coord, className='android.view.View', enabled=True)
         if uielement is not None:
+            kwargs = dict(options)
             kwargs.update({'percent': percent})
-            uielement.pinch_in(**kwargs)
-            mthcall_str = _build_method_call_str('pinch.In', **kwargs)
-            record('{0}.{1}'.format(uielement, mthcall_str))
+            uielement.pinch(in_or_out, record=record, **kwargs)
 
-    def pinch_out(self, coord, percent, record=_null_record, **kwargs):
-        """Performs pinch-out(center-to-edge) touch action
+    def fling(self, start, orientation, action,
+              record=_null_record, **options):
+        """Performs fling action on a scrollable object
 
         Args:
-            coord (tuple):
-                (x, y) coordinate which is contained in the ui element
-            percent (integer):
-                percentage of the element's diagonal length
-                for the pinch gesture
+            start (tuple):
+                The coordinates (x, y) of the scrollable object
+            orientation (text):
+                'horizontal' or 'vertical'
+            action (text):
+                'forward', 'backward', 'toBeginning' or 'toEnd'
             record (function): optional record() for generating a script
-            kwargs (dict): optional key-value pairs.  ex)steps=100
+            options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(
-            coord, className='android.view.View', enabled=True)
+        uielement = self.find_element_contains(start,
+                                               scrollable=True,
+                                               ignore_distant_element=False)
         if uielement is not None:
-            kwargs.update({'percent': percent})
-            uielement.pinch_out(**kwargs)
-            mthcall_str = _build_method_call_str('pinch.Out', **kwargs)
-            record('{0}.{1}'.format(uielement, mthcall_str))
+            uielement.fling(orientation, action, record=record, **options)
+
+    def scroll(self, start, orientation, action,
+               record=_null_record, **options):
+        """Performs scroll action on a scrollable object
+
+        Args:
+            start (tuple):
+                The coordinates (x, y) of the scrollable object
+            orientation (text):
+                'horizontal' or 'vertical'
+            action (text):
+                'forward', 'backward', 'toBeginning' or 'toEnd'
+            record (function): optional record() for generating a script
+            options (dict): optional key-value pairs.  ex)steps=100
+        """
+        uielement = self.find_element_contains(start,
+                                               scrollable=True,
+                                               ignore_distant_element=False)
+        if uielement is not None:
+            uielement.scroll(orientation, action, record=record, **options)
+
+    def scroll_to(self, start, orientation, target_selector_kwargs,
+                  record=_null_record, **options):
+        """Scroll until the item determined by target_selector_kwargs
+        is displayed
+
+        Args:
+            start (tuple):
+                The coordinates (x, y) of the scrollable object
+            orientation (text):
+                'horizontal' or 'vertical'
+            target_selector_kwargs (dict):
+                dict which contain key-value pairs to locate the target.
+                ex) {'text': 'Lock screen'}
+            record (function): optional record() for generating a script
+            options (dict): optional key-value pairs.  ex)steps=100
+        """
+        uielement = self.find_element_contains(start,
+                                               scrollable=True,
+                                               ignore_distant_element=False)
+        if uielement is not None:
+            scroll_kwargs = dict(target_selector_kwargs)
+            scroll_kwargs.update(options)
+            uielement.scroll(orientation, 'to', record=record, **scroll_kwargs)
