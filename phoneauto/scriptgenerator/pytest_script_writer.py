@@ -34,6 +34,7 @@ class PytestScriptWriter(object):
             '# -*- coding: utf-8 -*-',
             '',
             'from __future__ import unicode_literals',
+            'from datetime import datetime',
             'import os',
             'import time',
             'import pytest',

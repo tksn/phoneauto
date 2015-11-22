@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 import io
 
-from mock import MagicMock, call
+from mock import MagicMock, call, patch
 
 from phoneauto.scriptgenerator import scriptgenerator_main
 from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
@@ -85,7 +85,7 @@ def set_element_find_result(mocks, **uia_attr):
 # Button actions
 
 def assert_press(mocks, result_out, button_name, key_name):
-    button_widget_name = 'mainframe.{0}'.format(button_name)
+    button_widget_name = '{0}'.format(button_name)
     mocks.uiroot.nametowidget(button_widget_name).process_event(None)
     keycode = get_keycode(key_name)
     mocks.device.press.assert_called_with(keycode, None)
@@ -94,17 +94,119 @@ def assert_press(mocks, result_out, button_name, key_name):
 
 @mainloop_testfunc
 def test_back(mocks, result_out):
-    assert_press(mocks, result_out, 'back_button', 'BACK')
+    assert_press(mocks, result_out, 'mainframe.back_button', 'BACK')
 
 
 @mainloop_testfunc
 def test_home(mocks, result_out):
-    assert_press(mocks, result_out, 'home_button', 'HOME')
+    assert_press(mocks, result_out, 'mainframe.home_button', 'HOME')
 
 
 @mainloop_testfunc
 def test_recent_apps(mocks, result_out):
-    assert_press(mocks, result_out, 'recent_button', 'APP_SWITCH')
+    assert_press(mocks, result_out, 'mainframe.recent_button', 'APP_SWITCH')
+
+
+def click_sidebar_button(mocks, name):
+    button_widget_name = 'sidebar.{0}'.format(name)
+    mocks.uiroot.nametowidget(button_widget_name).process_event(None)
+
+
+@mainloop_testfunc
+def test_refresh_from_sidebar_button(mocks, result_out):
+    click_sidebar_button(mocks, 'refresh_button')
+    assert mocks.device.screenshot.called
+
+
+@mainloop_testfunc
+def test_take_screenshot(mocks, result_out):
+    from phoneauto.scriptgenerator.scriptgenerator_ui import get_filedialog
+    with patch.object(get_filedialog(), 'asksaveasfilename', return_value='abc'):
+        click_sidebar_button(mocks, 'screenshot_button')
+        assert mocks.device.screenshot.called
+        mocks.dummy_img.save.assert_called_with('abc')
+
+
+@mainloop_testfunc
+def test_power(mocks, result_out):
+    assert_press(mocks, result_out, 'sidebar.power_button', 'POWER')
+
+
+@mainloop_testfunc
+def test_open_notification(mocks, result_out):
+    click_sidebar_button(mocks, 'notification_button')
+    mocks.device.open.notification.assert_called_with()
+    assert '.open.notification()' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_open_quicksettings(mocks, result_out):
+    click_sidebar_button(mocks, 'quicksettings_button')
+    mocks.device.open.quick_settings.assert_called_with()
+    assert '.open.quick_settings()' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_volume_up(mocks, result_out):
+    assert_press(mocks, result_out, 'sidebar.volume_up_button', 'VOLUME_UP')
+
+
+@mainloop_testfunc
+def test_volume_down(mocks, result_out):
+    assert_press(mocks, result_out, 'sidebar.volume_down_button', 'VOLUME_DOWN')
+
+
+def assert_orientation_set(mocks, result_out, orient):
+    click_sidebar_button(
+        mocks, 'orientation_frame.orientation_{0}'.format(orient))
+    assert mocks.device.orientation == orient
+    assert '.orientation = \'{0}\''.format(orient) in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_orientation_natural(mocks, result_out):
+    assert_orientation_set(mocks, result_out, 'natural')
+
+
+@mainloop_testfunc
+def test_orientation_left(mocks, result_out):
+    assert_orientation_set(mocks, result_out, 'left')
+
+
+@mainloop_testfunc
+def test_orientation_right(mocks, result_out):
+    assert_orientation_set(mocks, result_out, 'right')
+
+
+@mainloop_testfunc
+def test_orientation_upsidedown(mocks, result_out):
+    assert_orientation_set(mocks, result_out, 'upsidedown')
+
+
+@mainloop_testfunc
+def test_orientation_unfreeze(mocks, result_out):
+    click_sidebar_button(
+        mocks, 'orientation_frame.orientation_unfreeze')
+    mocks.device.freeze_rotation.assert_called_with(freeze=False)
+    assert '.freeze_rotation(freeze=False)' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_insert_screenshot_capture(mocks, result_out):
+    click_sidebar_button(mocks, 'ins_screenshot_cap')
+    assert '.screenshot(' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_insert_wait_idle(mocks, result_out):
+    click_sidebar_button(mocks, 'ins_wait_idle')
+    assert '.wait.idle(' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_insert_wait_update(mocks, result_out):
+    click_sidebar_button(mocks, 'ins_wait_update')
+    assert '.wait.update(' in last_line(result_out)
 
 
 # Mouse left button click actions
@@ -209,6 +311,18 @@ def test_click_object(mocks, result_out):
 
 
 @mainloop_testfunc
+def test_click_object_and_wait(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Click(object) and wait')
+    ])
+    assert elem.click.wait.called
+    assert '.click.wait(' in last_line(result_out)
+
+
+@mainloop_testfunc
 def test_long_click_object(mocks, result_out):
     elem = set_element_find_result(mocks, resourceName='abc')
     perform_user_input(mocks, [
@@ -233,6 +347,18 @@ def dialog_click_ok(dialog):
 def set_dialog_action(mocks, widget_name, action_func):
     canvas = mocks.uiroot.nametowidget(widget_name)
     canvas.wait_window.side_effect = action_func
+
+
+@mainloop_testfunc
+def test_clear_text_on_object(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Clear text')
+    ])
+    elem.clear_text.assert_called_with()
+    assert '.clear_text()' in last_line(result_out)
 
 
 @mainloop_testfunc
@@ -330,6 +456,52 @@ def test_pinch_out(mocks, result_out):
     assert '.pinch.Out(' in last_line_str
     assert 'percent=50' in last_line_str
     assert 'steps=5' in last_line_str
+
+
+@mainloop_testfunc
+def test_display_info(mocks, result_out):
+    elem = set_element_find_result(
+        mocks, resourceName='abc', className='def', text='ghi')
+
+    info_text = ['']
+    def actions_when_infodialog_displayed(infodialog):
+        text = infodialog.nametowidget('infotext')
+        info_text[0] = text.insert.call_args[0][1] # str of text.insert(END, str)
+        dialog_click_ok(infodialog)
+
+    set_dialog_action(
+        mocks, 'mainframe.canvas', actions_when_infodialog_displayed)
+
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Display info')
+    ])
+    assert 'resourceName: abc' in info_text[0]
+    assert 'className: def' in info_text[0]
+    assert 'text: ghi' in info_text[0]
+
+
+@mainloop_testfunc
+def test_insert_object_wait_exists(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Insert wait-exists')
+    ])
+    assert '.wait.exists(' in last_line(result_out)
+
+
+@mainloop_testfunc
+def test_insert_object_wait_gone(mocks, result_out):
+    elem = set_element_find_result(mocks, resourceName='abc')
+    perform_user_input(mocks, [
+        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
+        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
+        user_input('menu', 'Insert wait-gone')
+    ])
+    assert '.wait.gone(' in last_line(result_out)
 
 
 @mainloop_testfunc

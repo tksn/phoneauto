@@ -45,35 +45,51 @@ class ScriptGenerator(object):
             return None
         return Image.open(file_path)
 
-    def back(self, _, device_index=0):
-        """Presses 'back' key of the device
+    def press_key(self, command_args, device_index=0):
+        """Presses a key of the device
+
+        Args:
+            command_args['key_name'] (text):
+                key name  ex) 'HOME', 'BACK' etc.
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].press_key(
+            command_args['key_name'],
+            record=self.writer.get_recorder(device_index))
+
+    def open_notification(self, _, device_index=0):
+        """Opens notification panel
 
         Args:
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].press_key(
-            'BACK', record=self.writer.get_recorder(device_index))
+        self.devices[device_index].open_notification(
+            record=self.writer.get_recorder(device_index))
 
-    def home(self, _, device_index=0):
-        """Presses 'home' key of the device
-
-        Args:
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].press_key(
-            'HOME', record=self.writer.get_recorder(device_index))
-
-    def recent_apps(self, _, device_index=0):
-        """Presses 'recent apps' key of the device
+    def open_quick_settings(self, _, device_index=0):
+        """Opens Quick Settings panel
 
         Args:
             device_index (integer):
                 The index of the device
         """
-        self.devices[device_index].press_key(
-            'APP_SWITCH', record=self.writer.get_recorder(device_index))
+        self.devices[device_index].open_quick_settings(
+            record=self.writer.get_recorder(device_index))
+
+    def clear_text(self, command_args, device_index=0):
+        """Clears text on the target UI object
+
+        Args:
+            command_args['start'] (tuple):
+                Coordinate (x, y) of the target object
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].clear_text(
+            command_args['start'],
+            record=self.writer.get_recorder(device_index))
 
     def enter_text(self, command_args, device_index=0):
         """Sets text to the target UI object
@@ -110,11 +126,21 @@ class ScriptGenerator(object):
             command_args['start'] (tuple):
                 Coordinate (x, y) of a pixel which is contained
                 in the target object
+            command_args['wait'] (boolean):
+                True if perform 'click and wait update', False otherwise
+            command_args['timeout'] (integer):
+                timeout for wait in milliseconds. not used when no wait
             device_index (integer):
                 The index of the device
         """
+        wait = None
+        if command_args.get('wait', False):
+            wait = {}
+            timeout = command_args.get('timeout')
+            if timeout is not None:
+                wait['timeout'] = timeout
         self.devices[device_index].click_object(
-            command_args['start'],
+            command_args['start'], wait,
             record=self.writer.get_recorder(device_index))
 
     def long_click_xy(self, command_args, device_index=0):
@@ -363,4 +389,81 @@ class ScriptGenerator(object):
         selector_kwargs = {'text': command_args['text']}
         self.devices[device_index].scroll_to(
             args['start'], args['orientation'], selector_kwargs,
+            record=self.writer.get_recorder(device_index))
+
+    def get_object_info(self, command_args, device_index=0):
+        """Returns UI object's information
+
+        Args:
+            command_args['start'] (tuple):
+                coordinate (x, y) on which the UI object is located
+            command_args['criteria'] (dict):
+                UI object selector key-value pairs ex) {'text': 'OK'}
+            device_index (integer):
+                The index of the device
+        Returns:
+            dict: UI object's information
+        """
+        info = self.devices[device_index].get_info(
+            command_args['start'],
+            **command_args.get('criteria', {}))
+        return info if info else {}
+
+    def set_orientation(self, command_args, device_index=0):
+        """sets the device's orientation
+
+        Args:
+            command_args['orientation'] (string):
+                'natural', 'left', 'right', 'upsidedown' or 'unfreeze'
+            device_index (integer):
+                The index of the device
+        """
+        self.devices[device_index].set_orientation(
+            command_args['orientation'],
+            record=self.writer.get_recorder(device_index))
+
+    def insert_screenshot_capture(self, _, device_index=0):
+        """Insert screenshot capture statement into the script
+
+        Args:
+            device_index (integer):
+                The index of the device
+        """
+        filename = ("datetime.today()"
+                    ".strftime('screenshot_%Y%m%d_%H%M%S_%f.png')")
+        self.devices[device_index].record_screenshot_capture(
+            filename,
+            record=self.writer.get_recorder(device_index))
+
+    def insert_wait(self, command_args, device_index=0):
+        """Insert wait statement into the script
+
+        Args:
+            command_args['for_what'] (string): 'idle' or 'update'
+            command_args['timeout'] (integer): timeout in msec
+            device_index (integer):
+                The index of the device
+        """
+        for_what = command_args.get('for_what', 'idle')
+        timeout = command_args.get('timeout')
+        self.devices[device_index].record_wait(
+            for_what, timeout,
+            record=self.writer.get_recorder(device_index))
+
+    def insert_wait_object(self, command_args, device_index=0):
+        """Insert wait-object statement into the script
+
+        Args:
+            command_args['start'] (tuple):
+                (x, y) coordinates on which the object locates
+            command_args['for_what'] (string): 'exists' or 'gone'
+            command_args['timeout'] (integer): timeout in msec
+            device_index (integer):
+                The index of the device
+        """
+        for_what = command_args.get('for_what', 'exists')
+        timeout = command_args.get('timeout')
+        self.devices[device_index].record_wait_object(
+            command_args['start'],
+            for_what, timeout,
             record=self.writer.get_recorder(device_index))

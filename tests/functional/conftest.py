@@ -15,5 +15,5 @@ def mocks(request, monkeypatch):
     m.uiroot = tkinter_mock.install(monkeypatch)
 
     if not request.config.getoption('--use_real_device'):
-        m.device = uiautomator_mock.install(monkeypatch)
+        m.device, m.dummy_img = uiautomator_mock.install(monkeypatch)
     return m

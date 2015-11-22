@@ -73,6 +73,11 @@ class UiElement(object):
         """kwargs used to create selector"""
         return self._kwargs
 
+    @property
+    def info(self):
+        """Information of this UI element"""
+        return self._impl.info
+
     def set_index(self, index):
         """Set index of this element in the collection of elements
         by the same selector args/kwargs
@@ -100,18 +105,29 @@ class UiElement(object):
             method_call_str += '[{0}]'.format(self._index)
         return method_call_str
 
-    def send_keys(self, keys):
-        """Sends keys to this element on the device
+    def set_text(self, text, record=_null_record):
+        """Sets text
 
         Args:
-            keys: Characters to be sent to the device
+            text: Characters to be sent to the device
         """
-        self._impl.set_text(keys)
+        self._impl.set_text(text)
+        record('{0}.set_text({1})'.format(self, _quote(text)))
 
-    def click(self, record=_null_record):
+    def clear_text(self, record=_null_record):
+        """Clears text"""
+        self._impl.clear_text()
+        record('{0}.clear_text()'.format(self))
+
+    def click(self, wait=None, record=_null_record):
         """Clicks on this element on the device"""
-        self._impl.click()
-        record('{0}.click()'.format(self))
+        if wait is None:
+            self._impl.click()
+            method_str = 'click()'
+        else:
+            self._impl.click.wait(**wait)
+            method_str = _build_method_call_str('click.wait', **wait)
+        record('{0}.{1}'.format(self, method_str))
 
     def long_click(self, record=_null_record):
         """Long-clicks on this element on the device"""
@@ -235,7 +251,14 @@ class UiautomatorDevice(object):
         device_name = _quote(device_name) if device_name else ''
         lines = [
             'import uiautomator',
-            'return uiautomator.Device({0})'.format(device_name)
+            ('from phoneauto.helpers.uiautomator_notfound_handlers '
+             'import install_standard_handlers'),
+            ('from phoneauto.helpers.uiautomator_device_wrapper '
+             'import DeviceWrapper'),
+            'device = DeviceWrapper(uiautomator.Device({0}))'.format(
+                device_name),
+            'install_standard_handlers(device)',
+            'return device'
             ]
         return lines
 
@@ -275,10 +298,10 @@ class UiautomatorDevice(object):
         coordinate and meets given criteria
         """
         T, L, B, R = 'top', 'left', 'bottom', 'right'
-        x, y = coord
 
         def xy_in_rect(r):
             """Check xy is in rect r"""
+            x, y = coord
             if x < r[L] or r[R] <= x or y < r[T] or r[B] <= y:
                 return False
             if ignore_distant_element:
@@ -333,16 +356,7 @@ class UiautomatorDevice(object):
         return self._device.screenshot(file_path)
 
     @staticmethod
-    def str_get_screenshot_as_file(file_path):
-        """Returns code fragment for screenshot aquisition
-
-        See Also: get_screenshot_as_file
-        """
-        format_str = '{{instance}}.get_screenshot_as_file({0})'
-        return format_str.format(_quote(file_path))
-
-    @staticmethod
-    def send_keys(uielement, keys, record=_null_record):
+    def set_text(uielement, keys, record=_null_record):
         """Sends characters to the UI element
 
         Args:
@@ -350,8 +364,7 @@ class UiautomatorDevice(object):
             keys: Characters to be sent
             record (function): optional record() for generating a script
         """
-        uielement.send_keys(keys)
-        record('{0}.set_text({1})'.format(uielement, _quote(keys)))
+        uielement.set_text(keys, record=record)
 
     def find_send_keys(self, coord, keys, record=_null_record):
         """Find the best method to send the keys and executes sending
@@ -367,7 +380,20 @@ class UiautomatorDevice(object):
             for k in self._chars_to_keys(keys):
                 self.press_key(k[0], meta=k[1], record=record)
         else:
-            self.send_keys(uielement, keys, record=record)
+            self.set_text(uielement, keys, record=record)
+
+    def clear_text(self, coord, record=_null_record):
+        """Clears text in a EditText object on a object
+        which contains the specified coordinate
+
+        Args:
+            coord (tuple): Coordinate (x, y)
+            record (function): optional record() for generating a script
+        """
+        uielement = self.find_element_contains(
+            coord, className='android.widget.EditText')
+        if uielement is not None:
+            uielement.clear_text(record=record)
 
     def press_key(self, key_name, meta=None, record=_null_record):
         """Press the key specified
@@ -378,7 +404,26 @@ class UiautomatorDevice(object):
         """
         kc = keycode.get_keycode(key_name)
         self._device.press(kc, meta)
-        record('{{instance}}.press({0}, {1})'.format(kc, meta))
+        record(
+            '{{instance}}.press({0}, {1})  # {2}'.format(kc, meta, key_name))
+
+    def open_notification(self, record=_null_record):
+        """Opens notification
+
+        Args:
+            record (function): optional record() for generating a script
+        """
+        self._device.open.notification()
+        record('{instance}.open.notification()')
+
+    def open_quick_settings(self, record=_null_record):
+        """Opens quick settings
+
+        Args:
+            record (function): optional record() for generating a script
+        """
+        self._device.open.quick_settings()
+        record('{instance}.open.quick_settings()')
 
     def click_xy(self, coord, record=_null_record):
         """Clicks on a coordinate
@@ -390,7 +435,7 @@ class UiautomatorDevice(object):
         self._device.click(*coord)
         record('{{instance}}.click({0}, {1})'.format(*coord))
 
-    def click_object(self, coord, record=_null_record):
+    def click_object(self, coord, wait, record=_null_record):
         """Clicks on a object which contains the specified coordinate
 
         Args:
@@ -399,7 +444,7 @@ class UiautomatorDevice(object):
         """
         uielement = self.find_element_contains(coord,
                                                clickable=True, enabled=True)
-        uielement.click(record=record)
+        uielement.click(wait=wait, record=record)
 
     def long_click_xy(self, coord, record=_null_record):
         """Long-clicks on a coordinate
@@ -583,3 +628,80 @@ class UiautomatorDevice(object):
             scroll_kwargs = dict(target_selector_kwargs)
             scroll_kwargs.update(options)
             uielement.scroll(orientation, 'to', record=record, **scroll_kwargs)
+
+    def get_info(self, start, **criteria):
+        """Returns UI object inforamtion
+
+        Args:
+            start (tuple):
+                the coordinates of the UI object's location
+            criteria (dict):
+                a dictionary which contains search criteria
+                (see python uiautomator's document)
+        Returns:
+            dict: UI object's information
+        """
+        uielement = self.find_element_contains(start, **criteria)
+        if uielement is None:
+            return None
+        return dict(uielement.info)
+
+    def set_orientation(self, orientation, record=_null_record):
+        """Sets the device's orientation
+
+        Args:
+            orientation (string):
+                'natural', 'left', 'right', 'upsidedown' or 'unfreeze'
+            record (function): optional record() for generating a script
+        """
+        if orientation == 'unfreeze':
+            self._device.freeze_rotation(freeze=False)
+            record('{instance}.freeze_rotation(freeze=False)')
+        else:
+            self._device.orientation = orientation
+            record(
+                '{{instance}}.orientation = {0}'.format(_quote(orientation)))
+
+    @staticmethod
+    def record_screenshot_capture(file, record):
+        """Records screenshot_capture code string
+
+        Args:
+            file (string):
+                file path or expression that yields file path
+            record (function): record function for generating a script
+        """
+        format_str = '{{instance}}.screenshot({0})'
+        record(format_str.format(file))
+
+    @staticmethod
+    def record_wait(for_what, timeout, record):
+        """Records wait code string
+
+        Args:
+            for_what (string): 'idle' or 'update'
+            timeout (integer): timeout in msec
+            record (function): record function for generating a script
+        """
+        options = {}
+        if timeout is not None:
+            options['timeout'] = timeout
+        mstr = _build_method_call_str('wait.{0}'.format(for_what), **options)
+        record('{{instance}}.{0}'.format(mstr))
+
+    def record_wait_object(self, start, for_what, timeout, record):
+        """Records wait-object code string
+
+        Args:
+            start (tuple): (x, y) coordinates on which the object locates
+            for_what (string): 'exists' or 'gone'
+            timeout (integer): timeout in msec
+            record (function): record function for generating a script
+        """
+        uielement = self.find_element_contains(start, enabled=True)
+        if uielement is not None:
+            options = {}
+            if timeout is not None:
+                options['timeout'] = timeout
+            record(_build_method_call_str(
+                '{0}.wait.{1}'.format(uielement, for_what), **options))

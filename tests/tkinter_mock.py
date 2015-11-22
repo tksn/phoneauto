@@ -1,34 +1,40 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import unicode_literals
-import PIL.ImageTk
-from mock import MagicMock, create_autospec
+from mock import Mock
 
 
 def install(monkeypatch):
     root = Tk()
     root_factory = lambda: root
     monkeypatch.setattr('tkinter.Tk', root_factory)
-    monkeypatch.setattr('tkinter.Toplevel', Toplevel)
+    monkeypatch.setattr('tkinter.Toplevel', Widget)
     monkeypatch.setattr('tkinter.Menu', Menu)
     monkeypatch.setattr('tkinter.Canvas', Canvas)
-    monkeypatch.setattr('tkinter.ttk.Frame', Frame)
+    monkeypatch.setattr('tkinter.ttk.Frame', Widget)
     monkeypatch.setattr('tkinter.ttk.Button', Button)
     monkeypatch.setattr('tkinter.ttk.Entry', Entry)
-    monkeypatch.setattr('tkinter.ttk.Label', Label)
+    monkeypatch.setattr('tkinter.ttk.Label', Widget)
     monkeypatch.setattr('tkinter.ttk.Scale', Scale)
-    monkeypatch.setattr('tkinter.StringVar', MagicMock)
-    monkeypatch.setattr(
-        'PIL.ImageTk.PhotoImage',
-        create_autospec(PIL.ImageTk.PhotoImage))
+    monkeypatch.setattr('tkinter.StringVar', Mock())
+    monkeypatch.setattr('tkinter.ttk.Separator', Widget)
+    monkeypatch.setattr('tkinter.Text', Text)
+    monkeypatch.setattr('PIL.ImageTk.PhotoImage', Mock())
     return root
 
 
 class Widget(object):
 
-    def __init__(self):
+    def __init__(self, *args, **options):
+        if len(args) > 0:
+            args[0].add_child(options.get('name'), self)
         self.children = {}
         self.callbacks = []
+        self.after_func = None
+
+        mock_methods = ['grid', 'pack', 'destroy', 'focus_set', 'update']
+        for m in mock_methods:
+            setattr(self, m, Mock())
 
     def add_child(self, name, child_inst):
         if name:
@@ -36,6 +42,11 @@ class Widget(object):
 
     def bind(self, event_name, callback):
         self.callbacks.append((event_name, callback))
+
+    def config(self, *args, **kwargs):
+        command_func = kwargs.get('command')
+        if command_func:
+            self.bind(None, command_func)
 
     def process_event(self, event_name, *args, **kwargs):
         for evt, cb in self.callbacks:
@@ -50,23 +61,6 @@ class Widget(object):
             desc_inst = desc_inst.nametowidget('.'.join(descs[1:]))
         return desc_inst
 
-
-class Tk(Widget):
-
-    def __init__(self):
-        Widget.__init__(self)
-        self.mainloop = MagicMock()
-        self.after_func = None
-
-    def title(self, title_str):
-        pass
-
-    def update(self):
-        pass
-
-    def config(self, *args, **kwargs):
-        pass
-
     def after(self, ms, after_func, *args):
         def after_func_wrap():
             after_func(*args)
@@ -80,190 +74,62 @@ class Tk(Widget):
             self.after_func()
 
 
-class Toplevel(Widget):
+class Tk(Widget):
 
-    def __init__(self, root, name=None):
+    def __init__(self):
         Widget.__init__(self)
-        root.add_child(name, self)
-        pass
-
-    def destroy(self):
-        pass
+        self.mainloop = Mock()
+        self.title = Mock()
 
 
 class Menu(Widget):
 
-    def __init__(self, root, name=None):
-        Widget.__init__(self)
-        root.add_child(name, self)
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        self.add_separator = Mock()
+        self.post = Mock()
 
     def add_command(self, label, command):
         self.bind(label, command)
 
-    def post(self, x, y):
-        pass
-
 
 class Canvas(Widget):
 
-    def __init__(self, root, width, height, name):
-        Widget.__init__(self)
-        root.add_child(name, self)
-        self.wait_window = MagicMock()
-
-    def focus_set(self):
-        pass
-
-    def grid(self, row, column, columnspan, sticky):
-        pass
-
-    def delete(self, id):
-        pass
-
-    def create_image(self, x, y, anchor, image):
-        pass
-
-    def after(self, ms, after_func, *args):
-        def after_func_wrap():
-            after_func(*args)
-        self.after_func = after_func_wrap
-
-    def after_cancel(self, timer_id):
-        self.after_func = None
-
-    def create_line(self, *args, **kwargs):
-        pass
-
-    def create_oval(self, tx, ty, bx, by, outline, fill, tag):
-        pass
-
-    def execute_after_func(self):
-        self.after_func()
-
-    def config(self, *args, **kwargs):
-        pass
-
-
-class Frame(Widget):
-
-    def __init__(self, root, name):
-        Widget.__init__(self)
-        root.add_child(name, self)
-
-    def grid(self, row, column, sticky):
-        pass
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        self.delete = Mock()
+        self.create_image = Mock()
+        self.create_line = Mock()
+        self.create_oval = Mock()
+        self.wait_window = Mock()
 
 
 class Button(Widget):
 
-    def __init__(self, root, text, command=None, name=''):
-        Widget.__init__(self)
-        root.add_child(name, self)
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        command = kwargs.get('command')
         if command:
             self.config(command=command)
-
-    def config(self, *args, **kwargs):
-        command_func = kwargs.get('command')
-        if command_func:
-            self.bind(None, command_func)
-
-    def grid(self, row, column, sticky, rowspan=None):
-        pass
 
 
 class Entry(Widget):
 
-    def __init__(self, root, name=None, textvariable=None):
-        Widget.__init__(self)
-        root.add_child(name, self)
-        self.textvariable = textvariable
-        self.get = MagicMock()
-
-    def grid(self, row, column, sticky):
-        pass
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        self.textvariable = kwargs.get('textvariable')
+        self.get = Mock()
 
 
 class Scale(Widget):
 
-    def __init__(self, root, name=None, value=None):
-        Widget.__init__(self)
-        root.add_child(name, self)
-        self.get = MagicMock()
-
-    def grid(self, row, column, sticky):
-        pass
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        self.get = Mock()
 
 
-class Label(Widget):
+class Text(Widget):
 
-    def __init__(self, root, name=None, text=None):
-        Widget.__init__(self)
-        root.add_child(name, self)
-
-    def grid(self, row, column, sticky):
-        pass
-
-
-# import tkinter
-# from mock import MagicMock, create_autospec
-#
-# def install(monkeypatch):
-#     root = widget_factory()
-#     root_factory = lambda: root
-#     monkeypatch.setattr('tkinter.Tk', root_factory)
-#     monkeypatch.setattr('tkinter.Toplevel', widget_factory)
-#     monkeypatch.setattr('tkinter.Menu', widget_factory)
-#     monkeypatch.setattr('tkinter.Canvas', widget_factory)
-#     monkeypatch.setattr('tkinter.ttk.Frame', widget_factory)
-#     monkeypatch.setattr('tkinter.ttk.Button', widget_factory)
-#     monkeypatch.setattr('tkinter.ttk.Entry', widget_factory)
-#     monkeypatch.setattr(
-#         'PIL.ImageTk.PhotoImage',
-#         create_autospec(PIL.ImageTk.PhotoImage))
-#
-#     class Accessor(object): pass
-#     acc = Accessor()
-#     acc.root = root
-#     return acc
-#
-#
-# def widget_factory(*args, **kwargs):
-#
-#     inst = MagicMock()
-#     inst.name = kwargs.get('name')
-#     inst.actions = []
-#     inst.children = {}
-#
-#     parent = args[0] if args else None
-#     if parent and inst.name:
-#         parent.children[inst.name] = inst
-#
-#     command = kwargs.get('command')
-#     if command:
-#         inst.actions.append((None, command))
-#
-#     def bind(trigger, action):
-#         inst.actions.append((trigger, action))
-#     inst.bind.side_effect = bind
-#
-#     def add_command(label, command):
-#         inst.actions.append((label, command))
-#     inst.add_command.side_effect = add_command
-#
-#     def execute_action(trigger=None, *args, **kwargs):
-#         for trig, act in inst.actions:
-#             if trig == trigger:
-#                 act(*args, **kwargs)
-#     inst.execute_action.side_effect = execute_action
-#
-#     def nametowidget(name):
-#         descs = name.split('.')
-#         childname = descs[0]
-#         desc_inst = inst.children[childname]
-#         if descs[1:]:
-#             desc_inst = desc_inst.nametowidget('.'.join(descs[1:]))
-#         return desc_inst
-#     inst.nametowidget.side_effect = nametowidget
-#
-#     return inst
-#
+    def __init__(self, *args, **kwargs):
+        Widget.__init__(self, *args, **kwargs)
+        self.insert = Mock()

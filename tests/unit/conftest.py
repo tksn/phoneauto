@@ -12,5 +12,5 @@ def mocks(request, monkeypatch):
 
     m = Mocks()
     m.uiroot = tkinter_mock.install(monkeypatch)
-    m.device = uiautomator_mock.install(monkeypatch)
+    m.device, m.dummy_img = uiautomator_mock.install(monkeypatch)
     return m

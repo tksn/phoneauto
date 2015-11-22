@@ -17,6 +17,22 @@ from tkinter import ttk
 from PIL import Image, ImageTk, ImageDraw
 
 
+def get_filedialog():  # pragma: no cover
+    """Returns filedialog module object
+
+    Returns appropriate filedialong module depending on sys.version.
+    The reason doing this is because python.future's tkinter.filedialog
+    is alias to FileDialog, not to tkFileDialog.
+    """
+    import sys
+    if sys.version_info.major >= 3:
+        import tkinter.filedialog
+        return tkinter.filedialog
+    else:
+        import tkFileDialog
+        return tkFileDialog
+
+
 @contextlib.contextmanager
 def display_wait(root_window):
     """Displays wait icon while context is alive"""
@@ -84,6 +100,9 @@ class ScriptGeneratorUI(object):
             mainframe, text='Recent Apps', name='recent_button')
         recent_button.grid(row=2, column=2, sticky=(N, W, E, S))
 
+        sidebar = ttk.Frame(self._root, name='sidebar')
+        sidebar.grid(row=0, column=1, sticky=(N, W, E, S))
+        self._construct_sidebar(sidebar)
         self._root.update()
 
     def _display_placeholder_screen(self):
@@ -104,14 +123,125 @@ class ScriptGeneratorUI(object):
                             'size': (width, height)}
         return canvas
 
+    @staticmethod
+    def _construct_sidebar(sidebar):
+        """Constructs side panel"""
+
+        def button(master, widget_options, pack_options=None):
+            """Creates a button"""
+            pack_options = pack_options or {'fill': tkinter.X}
+            btn = ttk.Button(master, **widget_options)
+            btn.pack(**pack_options)
+
+        def label(master, widget_options, pack_options=None):
+            """Creates a label"""
+            pack_options = (pack_options or
+                            {'fill': tkinter.X, 'anchor': tkinter.NW})
+            btn = ttk.Label(master, **widget_options)
+            btn.pack(**pack_options)
+
+        def separator(master, widget_options, pack_options=None):
+            """Creates a separator"""
+            pack_options = pack_options or {'fill': tkinter.X, 'pady': 5}
+            sep = ttk.Separator(master, **widget_options)
+            sep.pack(**pack_options)
+
+        button(sidebar, {'name': 'refresh_button', 'text': 'Refresh'})
+        button(sidebar, {'name': 'screenshot_button', 'text': 'Screenshot'})
+        separator(sidebar, {'orient': tkinter.HORIZONTAL})
+        button(sidebar, {'name': 'power_button', 'text': 'Power'})
+        button(sidebar,
+               {'name': 'notification_button', 'text': 'Notification'})
+        button(sidebar,
+               {'name': 'quicksettings_button', 'text': 'QuickSettings'})
+        button(sidebar, {'name': 'volume_up_button', 'text': 'Volume Up'})
+        button(sidebar, {'name': 'volume_down_button', 'text': 'Volume Down'})
+
+        label(sidebar, {'text': 'Orientation:'})
+        frm = ttk.Frame(sidebar, name='orientation_frame')
+
+        def orient_button(name, text):
+            """Orientation button"""
+            button(frm, {'name': name, 'text': text, 'width': 1},
+                   {'side': tkinter.LEFT})
+        orient_button('orientation_natural', 'N')
+        orient_button('orientation_left', 'L')
+        orient_button('orientation_right', 'R')
+        orient_button('orientation_upsidedown', 'U')
+        orient_button('orientation_unfreeze', 'Z')
+        frm.pack()
+
+        separator(sidebar, {'orient': tkinter.HORIZONTAL})
+        label(sidebar, {'text': 'Insert line to script:'})
+        button(sidebar,
+               {'name': 'ins_screenshot_cap',
+                'text': 'screenshot capture'})
+        button(sidebar,
+               {'name': 'ins_wait_idle', 'text': 'wait.idle'})
+        button(sidebar,
+               {'name': 'ins_wait_update', 'text': 'wait.update'})
+
+        separator(sidebar, {'orient': tkinter.HORIZONTAL})
+        label(sidebar, {'text': 'Keys\n  r: Refresh'})
+
     def _initialize(self):
         """Initialization after controller became available"""
         self._root.nametowidget('mainframe.back_button').config(
-            command=self._get_command_wrap(self._controller.back))
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='BACK'))
         self._root.nametowidget('mainframe.home_button').config(
-            command=self._get_command_wrap(self._controller.home))
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='HOME'))
         self._root.nametowidget('mainframe.recent_button').config(
-            command=self._get_command_wrap(self._controller.recent_apps))
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='APP_SWITCH'))
+
+        self._root.nametowidget('sidebar.refresh_button').config(
+            command=self._acquire_screen)
+        self._root.nametowidget('sidebar.screenshot_button').config(
+            command=self._take_screenshot)
+        self._root.nametowidget('sidebar.power_button').config(
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='POWER'))
+        self._root.nametowidget('sidebar.notification_button').config(
+            command=self._get_command_wrap(
+                self._controller.open_notification))
+        self._root.nametowidget('sidebar.quicksettings_button').config(
+            command=self._get_command_wrap(
+                self._controller.open_quick_settings))
+        self._root.nametowidget('sidebar.volume_up_button').config(
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='VOLUME_UP'))
+        self._root.nametowidget('sidebar.volume_down_button').config(
+            command=self._get_command_wrap(
+                self._controller.press_key, key_name='VOLUME_DOWN'))
+
+        orient_frm = self._root.nametowidget('sidebar.orientation_frame')
+        orient_frm.nametowidget('orientation_natural').config(
+            command=self._get_command_wrap(self._controller.set_orientation,
+                                           orientation='natural'))
+        orient_frm.nametowidget('orientation_left').config(
+            command=self._get_command_wrap(self._controller.set_orientation,
+                                           orientation='left'))
+        orient_frm.nametowidget('orientation_right').config(
+            command=self._get_command_wrap(self._controller.set_orientation,
+                                           orientation='right'))
+        orient_frm.nametowidget('orientation_upsidedown').config(
+            command=self._get_command_wrap(self._controller.set_orientation,
+                                           orientation='upsidedown'))
+        orient_frm.nametowidget('orientation_unfreeze').config(
+            command=self._get_command_wrap(self._controller.set_orientation,
+                                           orientation='unfreeze'))
+
+        self._root.nametowidget('sidebar.ins_screenshot_cap').config(
+            command=self._get_command_wrap(
+                self._controller.insert_screenshot_capture))
+        self._root.nametowidget('sidebar.ins_wait_idle').config(
+            command=self._get_command_wrap(
+                self._controller.insert_wait, for_what='idle', timeout=5000))
+        self._root.nametowidget('sidebar.ins_wait_update').config(
+            command=self._get_command_wrap(
+                self._controller.insert_wait, for_what='update', timeout=5000))
 
         canvas = self._root.nametowidget('mainframe.canvas')
         canvas.bind('<Button-1>', self._on_mouse_left_down)
@@ -276,7 +406,8 @@ class ScriptGeneratorUI(object):
         def command_wrap():
             """controller command execution"""
             with display_wait(self._root):
-                command(command_args)
+                retval = command(command_args)
+            return retval
         return command_wrap
 
     def _left_1point_action_menu(self, position):
@@ -318,13 +449,33 @@ class ScriptGeneratorUI(object):
             label='Click(object)',
             command=self._get_command_wrap(self._controller.click_object))
         menu.add_command(
+            label='Click(object) and wait',
+            command=self._get_command_wrap(
+                self._controller.click_object, wait=True, timeout=5000))
+        menu.add_command(
             label='Long click(object)',
             command=self._get_command_wrap(self._controller.long_click_object))
+        menu.add_command(
+            label='Clear text',
+            command=self._get_command_wrap(self._controller.clear_text))
         menu.add_command(
             label='Enter text',
             command=lambda: self._text_action(self._controller.enter_text))
         menu.add_command(label='Pinch in', command=lambda: self._pinch('In'))
         menu.add_command(label='Pinch out', command=lambda: self._pinch('Out'))
+        menu.add_separator()
+        menu.add_command(
+            label='Display info', command=self._display_info)
+        menu.add_command(
+            label='Insert wait-exists',
+            command=self._get_command_wrap(
+                self._controller.insert_wait_object,
+                for_what='exists', timeout=5000))
+        menu.add_command(
+            label='Insert wait-gone',
+            command=self._get_command_wrap(
+                self._controller.insert_wait_object,
+                for_what='gone', timeout=5000))
         menu.post(*position)
 
     def _right_2point_action_menu(self, position):
@@ -405,4 +556,38 @@ class ScriptGeneratorUI(object):
         # Place a OK button on the dialog
         ok_button = ttk.Button(top, text='OK', command=on_ok, name='ok_button')
         ok_button.grid(row=0, column=2, rowspan=2, sticky=(NW, SE))
+        canvas.wait_window(top)
+
+    def _take_screenshot(self):
+        """Callback for Take Screenshot"""
+        filename = get_filedialog().asksaveasfilename(defaultextension='.png')
+        if not filename:
+            return
+        with display_wait(self._root):
+            scr = self._controller.get_screenshot()
+        scr.save(filename)
+
+    def _display_info(self):
+        """Callback for Display info"""
+        from tkinter import NW
+
+        command_wrap = self._get_command_wrap(self._controller.get_object_info)
+        result = command_wrap()
+
+        # Create a dialog on the canvas
+        canvas = self._root.nametowidget('mainframe.canvas')
+        top = tkinter.Toplevel(canvas, name='info')
+
+        result_str = '\n'.join(
+            '{0}: {1}'.format(k, v) for k, v in result.items())
+
+        text = tkinter.Text(top, width=40, height=20, name='infotext')
+        text.insert(tkinter.END, result_str)
+        text.grid(row=0, column=0, sticky=NW)
+
+        # Place a OK button on the dialog
+        ok_button = ttk.Button(top, text='OK',
+                               command=top.destroy,
+                               name='ok_button')
+        ok_button.grid(row=1, column=0, sticky=NW)
         canvas.wait_window(top)

@@ -44,13 +44,6 @@ def test_find_can_create_text_codefragment(mocks):
     assert exec_find() == 'd(text=\'abcde\')'
 
 
-def test_str_get_screenshot_as_file(mocks):
-    d = uiautomator_device.UiautomatorDevice()
-    fmt = d.str_get_screenshot_as_file('/path/to/file.png')
-    txt = fmt.format(instance='d')
-    assert txt == 'd.get_screenshot_as_file(\'/path/to/file.png\')'
-
-
 def test_find_send_keys_to_non_element(mocks):
     mocks.device.return_value = []
     d = uiautomator_device.UiautomatorDevice()
@@ -65,3 +58,8 @@ def test_find_element_outside_rect(mocks):
     d = uiautomator_device.UiautomatorDevice()
     assert d.find_element_contains((11, 11)) is None
 
+
+def test_get_info_on_non_element(mocks):
+    mocks.device.return_value = []
+    d = uiautomator_device.UiautomatorDevice()
+    assert d.get_info((0, 0)) is None
