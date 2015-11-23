@@ -7,6 +7,7 @@
 # pylint: disable=invalid-name
 
 from __future__ import unicode_literals
+import argparse
 import codecs
 import io
 import os
@@ -18,18 +19,22 @@ from phoneauto.scriptgenerator.scriptgenerator_ui import ScriptGeneratorUI
 from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
 
 
-def scriptgenerator_main(result_out=None, scale=0.3, platform=None):
+def scriptgenerator_main(options):
     """Launches scriptgenerator GUI application
 
     Args:
-        result_out (file):
+        options['result_out'] (file):
             A file object to which automation script is written.
             Defaults to sys.stdout if result_out is None.
-        scale (float):
+        options['scale'] (float):
             Resizing scale which is used when the screenshot aquired from
             the device is displayed in GUI window. 1.0 means no scaling,
             scale > 1.0 makes it larger, scale < 1.0 makes it smaller.
+        options['platform'] (text):
+            A string which specifies platform such as 'Darwin' etc.
+            see sys.platform
     """
+    result_out = options.get('result_out', None)
     if result_out is None:
         if sys.version_info[0] >= 3:
             outfile = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -38,7 +43,12 @@ def scriptgenerator_main(result_out=None, scale=0.3, platform=None):
     else:
         outfile = codecs.getwriter('utf-8')(result_out)
 
-    ui = ScriptGeneratorUI(scale=scale, platform_sys=platform)
+    ui = ScriptGeneratorUI(scale=options.get('scale', 0.5),
+                           platform_sys=options.get('platform', None))
+    timeouts = options.get('timeouts')
+    if timeouts:
+        ui.set_timeouts(timeouts)
+
     device = UiautomatorDevice()
     writer = PytestScriptWriter(outfile, [device])
 
@@ -50,15 +60,47 @@ def scriptgenerator_main(result_out=None, scale=0.3, platform=None):
     device.close()
 
 
+def parse_options():
+    """Parse options"""
+    parser = argparse.ArgumentParser(
+        description='Phone automation script generator')
+    parser.add_argument(
+        '-s', '--scale', default=0.5, type=float,
+        help='scale factor for screenshot when it is displayed')
+    parser.add_argument(
+        '-o', '--output', default='',
+        help='Output file path. Stdout if omitted')
+    parser.add_argument(
+        '--wait_idle_timeout', default=5000, type=int,
+        help='default timeout for wait.idle in milliseconds')
+    parser.add_argument(
+        '--wait_update_timeout', default=1000, type=int,
+        help='default timeout for wait.update in milliseconds')
+    parser.add_argument(
+        '--wait_exists_timeout', default=5000, type=int,
+        help='default timeout for wait.exists in milliseconds')
+    parser.add_argument(
+        '--wait_gone_timeout', default=5000, type=int,
+        help='default timeout for wait.gone in milliseconds')
+    return parser.parse_args()
+
+
 def main():
-    kwargs = {}
-    if len(sys.argv) > 1:
-        filename = sys.argv[1]
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-        output_dir = os.path.join(script_dir, '../../output')
-        output_path = os.path.join(output_dir, filename)
-        kwargs['result_out'] = io.open(output_path, 'wb')
-    scriptgenerator_main(**kwargs)
+    """Entry point"""
+    cmd_options = parse_options()
+
+    options = {}
+    if cmd_options.output:
+        outpath = os.path.abspath(cmd_options.output)
+        options['result_out'] = io.open(outpath, 'wb')
+    options['scale'] = cmd_options.scale
+    options['timeout'] = {
+        'idle': cmd_options.wait_idle_timeout,
+        'update': cmd_options.wait_update_timeout,
+        'exists': cmd_options.wait_exists_timeout,
+        'gone': cmd_options.wait_gone_timeout
+    }
+    scriptgenerator_main(options)
 
 
 if __name__ == '__main__':

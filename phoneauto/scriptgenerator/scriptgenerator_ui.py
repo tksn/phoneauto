@@ -61,10 +61,26 @@ class ScriptGeneratorUI(object):
         self._screenshot = None
         self._mouse_action = None
 
+        self._wait_idle_timeout = 5000
+        self._wait_update_timeout = 1000
+        self._wait_exists_timeout = 5000
+        self._wait_gone_timeout = 5000
+
         self._hold_timer_id = None
         self._root = None
         self._platform = platform_sys or platform.system()
         self._create_components()
+
+    def set_timeouts(self, timeouts):
+        """Sets timeout values"""
+        self._wait_idle_timeout = timeouts.get(
+            'idle', self._wait_idle_timeout)
+        self._wait_update_timeout = timeouts.get(
+            'update', self._wait_update_timeout)
+        self._wait_exists_timeout = timeouts.get(
+            'exists', self._wait_exists_timeout)
+        self._wait_gone_timeout = timeouts.get(
+            'gone', self._wait_gone_timeout)
 
     def run(self, controller):
         """Launches UI and enter the event loop
@@ -238,10 +254,12 @@ class ScriptGeneratorUI(object):
                 self._controller.insert_screenshot_capture))
         self._root.nametowidget('sidebar.ins_wait_idle').config(
             command=self._get_command_wrap(
-                self._controller.insert_wait, for_what='idle', timeout=5000))
+                self._controller.insert_wait, for_what='idle',
+                timeout=self._wait_idle_timeout))
         self._root.nametowidget('sidebar.ins_wait_update').config(
             command=self._get_command_wrap(
-                self._controller.insert_wait, for_what='update', timeout=5000))
+                self._controller.insert_wait, for_what='update',
+                timeout=self._wait_update_timeout))
 
         canvas = self._root.nametowidget('mainframe.canvas')
         canvas.bind('<Button-1>', self._on_mouse_left_down)
@@ -451,7 +469,8 @@ class ScriptGeneratorUI(object):
         menu.add_command(
             label='Click(object) and wait',
             command=self._get_command_wrap(
-                self._controller.click_object, wait=True, timeout=5000))
+                self._controller.click_object, wait=True,
+                timeout=self._wait_update_timeout))
         menu.add_command(
             label='Long click(object)',
             command=self._get_command_wrap(self._controller.long_click_object))
@@ -470,12 +489,12 @@ class ScriptGeneratorUI(object):
             label='Insert wait-exists',
             command=self._get_command_wrap(
                 self._controller.insert_wait_object,
-                for_what='exists', timeout=5000))
+                for_what='exists', timeout=self._wait_exists_timeout))
         menu.add_command(
             label='Insert wait-gone',
             command=self._get_command_wrap(
                 self._controller.insert_wait_object,
-                for_what='gone', timeout=5000))
+                for_what='gone', timeout=self._wait_gone_timeout))
         menu.post(*position)
 
     def _right_2point_action_menu(self, position):

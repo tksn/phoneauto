@@ -26,7 +26,12 @@ def mainloop_testfunc(testfunc):
         def side_effect():
             testfunc(mocks, result_out)
         mocks.uiroot.mainloop.side_effect = side_effect
-        scriptgenerator_main(result_out, scale=1.0, platform='Darwin')
+        options = {
+            'result_out': result_out,
+            'scale': 1.0,
+            'platform': 'Darwin'
+        }
+        scriptgenerator_main(options)
         assert mocks.uiroot.mainloop.called
     return wrap_testfunc
 
