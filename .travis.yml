@@ -1,8 +1,17 @@
 language: python
 python: 3.4
+env:
+  matrix:
+   - TOXENV=py27
+   - TOXENV=py34
+   - TOXENV=pep8
+   - TOXENV=lint
 install:
   - pip install -U pip
   - pip install tox
   - pip install -r requirements.txt
+  - if test "$TOXENV" = py34 ; then pip install coveralls ; fi
 script:
   - tox
+after_script:
+  - if test "$TOXENV" = py34 ; then coveralls ; fi
