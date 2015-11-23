@@ -50,7 +50,7 @@ def scriptgenerator_main(result_out=None, scale=0.3, platform=None):
     device.close()
 
 
-if __name__ == '__main__':
+def main():
     kwargs = {}
     if len(sys.argv) > 1:
         filename = sys.argv[1]
@@ -59,3 +59,7 @@ if __name__ == '__main__':
         output_path = os.path.join(output_dir, filename)
         kwargs['result_out'] = io.open(output_path, 'wb')
     scriptgenerator_main(**kwargs)
+
+
+if __name__ == '__main__':
+    main()
