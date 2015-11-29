@@ -50,8 +50,10 @@ def test_find_send_keys_to_non_element(mocks):
     d.find_send_keys((0, 0), 'abcde')
 
 
+class _Object(object): pass
+
+
 def test_find_element_outside_rect(mocks):
-    class _Object(object): pass
     elem = _Object()
     elem.info = uia_element_info(visibleBounds=bounds(0, 0, 10, 10))
     mocks.device.return_value = [ elem ]
@@ -63,3 +65,40 @@ def test_get_info_on_non_element(mocks):
     mocks.device.return_value = []
     d = uiautomator_device.UiautomatorDevice()
     assert d.get_info((0, 0)) is None
+
+
+DUMP_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id=""
+    class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
+    content-desc="" checkable="false" checked="false" clickable="false"
+    enabled="true" focusable="false" focused="false" scrollable="false"
+    long-clickable="false" password="false" selected="false"
+    bounds="[0,0][1080,100]">
+  </node>
+  <node index="0" text="" resource-id=""
+    class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
+    content-desc="" checkable="false" checked="false" clickable="false"
+    enabled="true" focusable="false" focused="false" scrollable="false"
+    long-clickable="false" password="false" selected="false"
+    bounds="[0,100][1080,1920]">
+  </node>
+</hierarchy>
+"""
+
+
+def test_update_view_hierarchy_dump(mocks):
+    mocks.device.dump.return_value = DUMP_XML
+    elem0 = _Object()
+    elem0.info = uia_element_info(text='abc')
+    elem1 = _Object()
+    elem1.info = uia_element_info(text='def')
+    mocks.device.return_value = [elem0, elem1]
+    d = uiautomator_device.UiautomatorDevice()
+    d.update_view_hierarchy_dump()
+    uielem = d.find_element_contains(
+        (500, 500),
+        ignore_distant_element=False,
+        className='android.widget.FrameLayout')
+    assert uielem.info['text'] == 'def'
+    assert uielem._index == 1

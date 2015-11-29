@@ -304,6 +304,7 @@ class ScriptGeneratorUI(object):
         image_id = canvas.create_image(0, 0, anchor=NW, image=screenshot)
         self._screenshot = {'image': screenshot, 'id': image_id,
                             'size': (width, height)}
+        self._controller.update_view_dump()
         return canvas
 
     def _descale(self, coord):

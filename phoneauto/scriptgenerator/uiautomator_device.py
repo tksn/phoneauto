@@ -7,10 +7,10 @@
 # pylint: disable=invalid-name
 
 from __future__ import unicode_literals
-import math
-import sys
 import uiautomator
 from . import keycode
+from . import uiobjectfinder
+from . import view_hierarchy_dump
 
 
 def _quote(text):
@@ -41,6 +41,16 @@ def _build_swipe_drag_str(method_str, *args, **kwargs):
 def _null_record(_):
     """Dumb record function """
     pass
+
+
+class UiObjectNotFound(Exception):
+
+    def __init__(self, message):
+        super(UiObjectNotFound).__init__()
+        self.message = message
+
+    def __str__(self):
+        return 'UiObjectNotFound: ' + self.message
 
 
 class UiElement(object):
@@ -217,8 +227,6 @@ class UiElement(object):
 class UiautomatorDevice(object):
     """Device class"""
 
-    _FIND_ELEMENT_DISTANCE_THRESH = 200
-
     def __init__(self, device_name=None):
         """Initialization
 
@@ -228,6 +236,7 @@ class UiautomatorDevice(object):
         """
         self._device = uiautomator.Device(device_name)
         self._device.server.start()  # to make sure jsonrpc is running
+        self._objfinder = uiobjectfinder.UiObjectFinder(self._device)
         self._chars_to_keys = keycode.chars_to_keys_us
 
     def close(self):
@@ -273,6 +282,18 @@ class UiautomatorDevice(object):
         """
         return ['pass']
 
+    def update_view_hierarchy_dump(self):
+        """Update view hierarchy dump"""
+        dump_str = self._device.dump()
+        hierarchy_dump = view_hierarchy_dump.ViewHierarchyDump(
+            self._device.info, dump_str)
+        self._objfinder.set_hierarchy_dump(hierarchy_dump)
+
+    def invalidate_view_hierarchy_dump(self):
+        """Invalidate existing view hierarchy dump
+        in order to mark it is obsolete"""
+        self._objfinder.set_hierarchy_dump(None)
+
     def find_element_contains(self, coord, **criteria):
         """Finds the element which contains given coordinate and
         meets given criteria
@@ -286,66 +307,21 @@ class UiautomatorDevice(object):
         uia_criteria = dict(criteria)
         ignore_distant_element = uia_criteria.pop(
             'ignore_distant_element', True)
-        element = self._get_element_contains(coord, uia_criteria,
-                                             ignore_distant_element)
-        if not element:
-            return None
-        return self._create_element_obj(element, uia_criteria)
+        result = self._objfinder.find_object_contains(
+            coord, ignore_distant_element, **uia_criteria)
+        if result is None:
+            raise UiObjectNotFound('({0}, {1})'.format(*coord))
 
-    def _get_element_contains(self, coord, criteria,
-                              ignore_distant_element):
-        """Returns the information of element which contains given
-        coordinate and meets given criteria
-        """
-        T, L, B, R = 'top', 'left', 'bottom', 'right'
-
-        def xy_in_rect(r):
-            """Check xy is in rect r"""
-            x, y = coord
-            if x < r[L] or r[R] <= x or y < r[T] or r[B] <= y:
-                return False
-            if ignore_distant_element:
-                r_x, r_y = r[L] + (r[R] - r[L]) / 2, r[T] + (r[B] - r[T]) / 2
-                distance = math.hypot(x - r_x, y - r_y)
-                return distance < self._FIND_ELEMENT_DISTANCE_THRESH
-            return True
-
-        def rect_area(r):
-            """Returns area of rect r"""
-            return (r[B] - r[T]) * (r[R] - r[L])
-
-        uia_elements = self._device(**criteria)
-        min_element = (sys.maxsize, )
-        for i, uia_element in enumerate(uia_elements):
-            info = uia_element.info
-            rect = info['visibleBounds']
-            area = rect_area(rect)
-            if xy_in_rect(rect) and area < min_element[0]:
-                min_element = (area, uia_element, info, i)
-        return min_element[1:]
-
-    def _create_element_obj(self, element, criteria):
-        """Determines locator and creates UI element object"""
-        uia_element, element_info, index = element
-
-        # uses resource_id if it's available and unique
-        resource_id = element_info['resourceName']
-        if resource_id:
-            uia_elements = self._device(resourceId=resource_id)
-            if len(uia_elements) == 1:
-                return UiElement(uia_element, resourceId=resource_id)
-
-        # uses content-desc if it's available
-        content_desc = element_info['contentDescription']
-        if content_desc:
-            return UiElement(uia_element, description=content_desc)
-
-        # uses text if it's available
-        if element_info['text']:
-            return UiElement(uia_element, text=element_info['text'])
-
-        # uses criteria which is what used for this element-finding
-        return UiElement(uia_element, **criteria).set_index(index)
+        obj = result['object']
+        index = result.get('index')
+        if not hasattr(obj, 'click'):
+            obj = self._device(**result['locator'])
+            if index is not None:
+                obj = obj[index]
+        uielem = UiElement(obj, **result['locator'])
+        if index is not None:
+            uielem = uielem.set_index(index)
+        return uielem
 
     def get_screenshot_as_file(self, file_path):
         """Aquires screenshot from the device and save it as a file

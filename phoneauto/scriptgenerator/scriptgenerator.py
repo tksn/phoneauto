@@ -29,6 +29,9 @@ class ScriptGenerator(object):
         self.devices = devices
         self.writer = writer
 
+    def update_view_dump(self, device_index=0):
+        self.devices[device_index].update_view_hierarchy_dump()
+
     def get_screenshot(self, device_index=0):
         """Gets device's screenshot
 
@@ -57,6 +60,7 @@ class ScriptGenerator(object):
         self.devices[device_index].press_key(
             command_args['key_name'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def open_notification(self, _, device_index=0):
         """Opens notification panel
@@ -67,6 +71,7 @@ class ScriptGenerator(object):
         """
         self.devices[device_index].open_notification(
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def open_quick_settings(self, _, device_index=0):
         """Opens Quick Settings panel
@@ -77,6 +82,7 @@ class ScriptGenerator(object):
         """
         self.devices[device_index].open_quick_settings(
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def clear_text(self, command_args, device_index=0):
         """Clears text on the target UI object
@@ -118,6 +124,7 @@ class ScriptGenerator(object):
         self.devices[device_index].click_xy(
             command_args['start'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def click_object(self, command_args, device_index=0):
         """Clicks on a UI object
@@ -142,6 +149,7 @@ class ScriptGenerator(object):
         self.devices[device_index].click_object(
             command_args['start'], wait,
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def long_click_xy(self, command_args, device_index=0):
         """Long-clicks on a pixel
@@ -155,6 +163,7 @@ class ScriptGenerator(object):
         self.devices[device_index].long_click_xy(
             command_args['start'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def long_click_object(self, command_args, device_index=0):
         """Long-clicks on a UI object
@@ -168,6 +177,7 @@ class ScriptGenerator(object):
         self.devices[device_index].long_click_object(
             command_args['start'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def drag_xy_to_xy(self, command_args, device_index=0):
         """Performs drag-and-drop action with specifying
@@ -184,6 +194,7 @@ class ScriptGenerator(object):
         self.devices[device_index].drag_xy_to_xy(
             command_args['start'], command_args['end'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def drag_object_to_xy(self, command_args, device_index=0):
         """Performs drag-and-drop action with specifying
@@ -200,6 +211,7 @@ class ScriptGenerator(object):
         self.devices[device_index].drag_object_to_xy(
             command_args['start'], command_args['end'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def drag_object_to_object(self, command_args, device_index=0):
         """Performs drag-and-drop action with specifying
@@ -216,6 +228,7 @@ class ScriptGenerator(object):
         self.devices[device_index].drag_object_to_object(
             command_args['start'], command_args['end'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def swipe_xy_to_xy(self, command_args, device_index=0):
         """Performs swipe action with specifying
@@ -232,6 +245,7 @@ class ScriptGenerator(object):
         self.devices[device_index].swipe(
             command_args['start'], command_args['end'], steps=10,
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def swipe_object_with_direction(self, command_args, device_index=0):
         """Swipes a UI object toward specified direction
@@ -254,6 +268,7 @@ class ScriptGenerator(object):
         self.devices[device_index].swipe_object(
             start, direction,
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def pinch(self, command_args, device_index=0):
         """Performs pinch-in(edge-to-center)/pinch-out(center-to-edge) action
@@ -277,6 +292,7 @@ class ScriptGenerator(object):
             command_args['in_or_out'], command_args['start'],
             command_args['percent'], steps=command_args['steps'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     @staticmethod
     def _fling_scroll_args(start, end, to_end):
@@ -312,6 +328,7 @@ class ScriptGenerator(object):
         self.devices[device_index].fling(
             args['start'], args['orientation'], args['action'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def fling_to_end(self, command_args, device_index=0):
         """Performs fling action on a scrollable UI object until
@@ -331,6 +348,7 @@ class ScriptGenerator(object):
         self.devices[device_index].fling(
             args['start'], args['orientation'], args['action'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def scroll(self, command_args, device_index=0):
         """Performs scroll action on a scrollable UI object
@@ -349,6 +367,7 @@ class ScriptGenerator(object):
         self.devices[device_index].scroll(
             args['start'], args['orientation'], args['action'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def scroll_to_end(self, command_args, device_index=0):
         """Performs scroll action on a scrollable UI object until
@@ -368,6 +387,7 @@ class ScriptGenerator(object):
         self.devices[device_index].scroll(
             args['start'], args['orientation'], args['action'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def scroll_to_text(self, command_args, device_index=0):
         """Performs scroll action on a scrollable UI object until
@@ -390,6 +410,7 @@ class ScriptGenerator(object):
         self.devices[device_index].scroll_to(
             args['start'], args['orientation'], selector_kwargs,
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def get_object_info(self, command_args, device_index=0):
         """Returns UI object's information
@@ -421,6 +442,7 @@ class ScriptGenerator(object):
         self.devices[device_index].set_orientation(
             command_args['orientation'],
             record=self.writer.get_recorder(device_index))
+        self.devices[device_index].invalidate_view_hierarchy_dump()
 
     def insert_screenshot_capture(self, _, device_index=0):
         """Insert screenshot capture statement into the script
