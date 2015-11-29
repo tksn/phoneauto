@@ -7,6 +7,7 @@ from mock import MagicMock, call, patch
 
 from phoneauto.scriptgenerator import scriptgenerator_main
 from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
+from phoneauto.scriptgenerator.uiobjectfinder import UiObjectFinder
 from phoneauto.scriptgenerator.keycode import get_keycode
 from tests.uiautomator_mock import uia_element_info, bounds
 
@@ -19,6 +20,9 @@ def last_line(result_out):
             return l
     raise AssertionError('There is no lines in result_out')
 
+INI_DUMP_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0"></hierarchy>
+"""
 
 def mainloop_testfunc(testfunc):
     def wrap_testfunc(mocks):
@@ -31,7 +35,9 @@ def mainloop_testfunc(testfunc):
             'scale': 1.0,
             'platform': 'Darwin'
         }
-        scriptgenerator_main(options)
+        mocks.device.dump.return_value = INI_DUMP_XML
+        with patch.object(UiObjectFinder, '_FIND_OBJECT_DISTANCE_THRESH', new=100000000):
+            scriptgenerator_main(options)
         assert mocks.uiroot.mainloop.called
     return wrap_testfunc
 
@@ -80,10 +86,46 @@ def perform_user_input(mocks, events):
     mocks.uiroot.process_after_func()
 
 
+def create_dump_xml(objinfo):
+    node_attr = {}
+    for key, value in objinfo.items():
+        if key == 'text':
+            node_attr['text'] = value
+        elif key == 'className':
+            node_attr['class'] = value
+        elif key == 'contentDescription':
+            node_attr['content-desc'] = value
+        elif key == 'resourceName':
+            node_attr['resource-id'] = value
+        elif key == 'bounds' or key == 'visibleBounds':
+            node_attr['bounds'] = '[{0},{1}][{2},{3}]'.format(
+                value['left'], value['top'], value['right'], value['bottom'])
+        elif key == 'longClickable':
+            node_attr['long-clickable'] = 'true' if value else 'false'
+        elif isinstance(value, bool):
+            node_attr[key] = 'true' if value else 'false'
+        else:
+            node_attr[key] = value
+
+    xml = [
+        "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>",
+        '<hierarchy rotation="0">',
+        '  <node ' +
+        ' '.join('{0}=\'{1}\''.format(k, v) for k, v in node_attr.items()) +
+        '/>'
+        '</hierarchy>'
+        ]
+    return ''.join(xml)
+
+
 def set_element_find_result(mocks, **uia_attr):
     elem = MagicMock()
     elem.info = uia_element_info(**uia_attr)
+
     mocks.device.return_value = [elem]
+
+    mocks.device.dump.return_value = create_dump_xml(elem.info)
+    mocks.uiroot.process_event('r')
     return elem
 
 
@@ -277,7 +319,7 @@ def test_drag_object_to_xy(mocks, result_out):
 
 @mainloop_testfunc
 def test_fling_vertical_forward(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, scrollable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-1>', coord=(10, 50)),
         user_input('mainframe.canvas', '<B1-Motion>', coord=(10, 30)),
@@ -290,7 +332,7 @@ def test_fling_vertical_forward(mocks, result_out):
 
 @mainloop_testfunc
 def test_scroll_horizontal_backward(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, scrollable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-1>', coord=(10, 10)),
         user_input('mainframe.canvas', '<B1-Motion>', coord=(30, 10)),
@@ -329,7 +371,8 @@ def test_click_object_and_wait(mocks, result_out):
 
 @mainloop_testfunc
 def test_long_click_object(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(
+        mocks, longClickable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
         user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
@@ -356,7 +399,9 @@ def set_dialog_action(mocks, widget_name, action_func):
 
 @mainloop_testfunc
 def test_clear_text_on_object(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks,
+                                   className='android.widget.EditText',
+                                   resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
         user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
@@ -376,7 +421,8 @@ def test_enter_text_on_object(mocks, result_out):
     set_dialog_action(
         mocks, 'mainframe.canvas', actions_when_dialog_displayed)
 
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(
+        mocks, className='android.widget.EditText', resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
         user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
@@ -417,7 +463,9 @@ def pinchdialog_set(dialog, percent, steps):
 
 @mainloop_testfunc
 def test_pinch_in(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks,
+                                   className='android.view.View',
+                                   resourceName='abc')
 
     def actions_when_pinchdialog_displayed(pinchdialog):
         pinchdialog_set(pinchdialog, 0.5, 5)
@@ -441,7 +489,8 @@ def test_pinch_in(mocks, result_out):
 
 @mainloop_testfunc
 def test_pinch_out(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(
+        mocks, className='android.view.View', resourceName='abc')
 
     def actions_when_pinchdialog_displayed(pinchdialog):
         pinchdialog_set(pinchdialog, 0.5, 5)
@@ -511,7 +560,7 @@ def test_insert_object_wait_gone(mocks, result_out):
 
 @mainloop_testfunc
 def test_swipe_object_with_direction(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, scrollable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(50, 10)),
         user_input('mainframe.canvas', '<B2-Motion>', coord=(30, 10)),
@@ -537,7 +586,7 @@ def test_drag_object_to_object(mocks, result_out):
 
 @mainloop_testfunc
 def test_fling_vertical_to_beginning(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, resourceName='abc', scrollable=True)
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(10, 10)),
         user_input('mainframe.canvas', '<B2-Motion>', coord=(10, 30)),
@@ -550,7 +599,7 @@ def test_fling_vertical_to_beginning(mocks, result_out):
 
 @mainloop_testfunc
 def test_scroll_horizontal_to_end(mocks, result_out):
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, scrollable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(50, 10)),
         user_input('mainframe.canvas', '<B2-Motion>', coord=(30, 10)),
@@ -571,7 +620,7 @@ def test_scroll_vertical_to_text(mocks, result_out):
     set_dialog_action(
         mocks, 'mainframe.canvas', actions_when_dialog_displayed)
 
-    elem = set_element_find_result(mocks, resourceName='abc')
+    elem = set_element_find_result(mocks, scrollable=True, resourceName='abc')
     perform_user_input(mocks, [
         user_input('mainframe.canvas', '<Button-2>', coord=(10, 10)),
         user_input('mainframe.canvas', '<B2-Motion>', coord=(10, 30)),

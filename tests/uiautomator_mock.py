@@ -12,6 +12,8 @@ _SCREEN_HEIGHT = 64
 def install(monkeypatch):
     DeviceMock = create_autospec(uiautomator.Device)
     device = DeviceMock()
+    device.info = {
+        'displayWidth': _SCREEN_WIDTH, 'displayHeight': _SCREEN_HEIGHT}
     device.server = MagicMock()
     device.server.start = MagicMock()
     device.screenshot.return_value=True
@@ -41,7 +43,9 @@ def uia_element_info(**kwvalues):
         'resourceName': '',
         'contentDescription': '',
         'text': '',
-        'className': ''
+        'className': '',
+        'clickable': True,
+        'enabled': True
     }
     elem.update(kwvalues)
     return elem

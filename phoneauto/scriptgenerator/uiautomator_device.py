@@ -20,7 +20,8 @@ def _quote(text):
 
 def _quote_if_str(value):
     """Encloses the string with quotation characters if the value is a str"""
-    return (_quote(value) if isinstance(value, type(''))
+    return (_quote(value)
+            if isinstance(value, type(u'')) or isinstance(value, type(b''))
             else str(value))
 
 
@@ -46,7 +47,7 @@ def _null_record(_):
 class UiObjectNotFound(Exception):
 
     def __init__(self, message):
-        super(UiObjectNotFound).__init__()
+        super(UiObjectNotFound, self).__init__()
         self.message = message
 
     def __str__(self):
@@ -318,6 +319,8 @@ class UiautomatorDevice(object):
             obj = self._device(**result['locator'])
             if index is not None:
                 obj = obj[index]
+            else:
+                obj = obj[0]
         uielem = UiElement(obj, **result['locator'])
         if index is not None:
             uielem = uielem.set_index(index)
@@ -350,13 +353,13 @@ class UiautomatorDevice(object):
             keys (text): The keys to be sent
             record (function): optional record() for generating a script
         """
-        uielement = self.find_element_contains(
-            coord, className='android.widget.EditText')
-        if uielement is None:
+        try:
+            uielement = self.find_element_contains(
+                coord, className='android.widget.EditText')
+            self.set_text(uielement, keys, record=record)
+        except UiObjectNotFound:
             for k in self._chars_to_keys(keys):
                 self.press_key(k[0], meta=k[1], record=record)
-        else:
-            self.set_text(uielement, keys, record=record)
 
     def clear_text(self, coord, record=_null_record):
         """Clears text in a EditText object on a object
@@ -618,8 +621,6 @@ class UiautomatorDevice(object):
             dict: UI object's information
         """
         uielement = self.find_element_contains(start, **criteria)
-        if uielement is None:
-            return None
         return dict(uielement.info)
 
     def set_orientation(self, orientation, record=_null_record):

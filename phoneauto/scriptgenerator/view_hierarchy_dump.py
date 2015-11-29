@@ -101,11 +101,10 @@ class ViewHierarchyDump(object):
         }
 
     def _get_attrs(self, node):
-        node_attrs = node.attrib
         out_attrs = {}
-        self._get_boolean_attrs(node_attrs, out_attrs)
-        self._get_string_attrs(node_attrs, out_attrs)
-        self._get_bounds_attr(node_attrs, out_attrs)
+        self._get_boolean_attrs(node, out_attrs)
+        self._get_string_attrs(node, out_attrs)
+        self._get_bounds_attr(node, out_attrs)
         visible_bounds = self._get_visible_bounds_attr(
             self._device_info, out_attrs['bounds'])
         out_attrs['visibleBounds'] = visible_bounds
@@ -153,7 +152,7 @@ class ViewHierarchyDump(object):
         for node in self._root.iter('node'):
             match = True
             for matcher in matchers:
-                rhs_value = node.attrib.get(matcher.key, '')
+                rhs_value = node.get(matcher.key, '')
                 if not matcher(rhs_value):
                     match = False
                     break

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import unicode_literals
+import pytest
 from mock import MagicMock
 from phoneauto.scriptgenerator import uiautomator_device
 from tests.uiautomator_mock import uia_element_info, bounds
@@ -58,13 +59,15 @@ def test_find_element_outside_rect(mocks):
     elem.info = uia_element_info(visibleBounds=bounds(0, 0, 10, 10))
     mocks.device.return_value = [ elem ]
     d = uiautomator_device.UiautomatorDevice()
-    assert d.find_element_contains((11, 11)) is None
+    with pytest.raises(uiautomator_device.UiObjectNotFound):
+        d.find_element_contains((11, 11))
 
 
 def test_get_info_on_non_element(mocks):
     mocks.device.return_value = []
     d = uiautomator_device.UiautomatorDevice()
-    assert d.get_info((0, 0)) is None
+    with pytest.raises(uiautomator_device.UiObjectNotFound):
+        d.get_info((0, 0))
 
 
 DUMP_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
@@ -74,14 +77,14 @@ DUMP_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
     content-desc="" checkable="false" checked="false" clickable="false"
     enabled="true" focusable="false" focused="false" scrollable="false"
     long-clickable="false" password="false" selected="false"
-    bounds="[0,0][1080,100]">
+    bounds="[0,0][64,32]">
   </node>
   <node index="0" text="" resource-id=""
     class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
     content-desc="" checkable="false" checked="false" clickable="false"
     enabled="true" focusable="false" focused="false" scrollable="false"
     long-clickable="false" password="false" selected="false"
-    bounds="[0,100][1080,1920]">
+    bounds="[0,32][64,64]">
   </node>
 </hierarchy>
 """
@@ -97,7 +100,7 @@ def test_update_view_hierarchy_dump(mocks):
     d = uiautomator_device.UiautomatorDevice()
     d.update_view_hierarchy_dump()
     uielem = d.find_element_contains(
-        (500, 500),
+        (32, 48),
         ignore_distant_element=False,
         className='android.widget.FrameLayout')
     assert uielem.info['text'] == 'def'
