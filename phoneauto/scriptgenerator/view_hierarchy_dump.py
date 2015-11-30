@@ -144,8 +144,6 @@ class ViewHierarchyDump(object):
 
     def find_objects(self, **criteria):
 
-        class _DummyUiObject(object): pass
-
         matchers = self._get_matchers(criteria)
 
         found = []
@@ -157,8 +155,6 @@ class ViewHierarchyDump(object):
                     match = False
                     break
             if match:
-                obj = _DummyUiObject()
-                obj.info = self._get_attrs(node)
-                found.append(obj)
+                found.append(self._get_attrs(node))
 
         return found

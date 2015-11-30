@@ -44,16 +44,6 @@ def _null_record(_):
     pass
 
 
-class UiObjectNotFound(Exception):
-
-    def __init__(self, message):
-        super(UiObjectNotFound, self).__init__()
-        self.message = message
-
-    def __str__(self):
-        return 'UiObjectNotFound: ' + self.message
-
-
 class UiElement(object):
     """UI element class"""
 
@@ -225,6 +215,14 @@ class UiElement(object):
         record(_build_method_call_str(method_name, **kwargs))
 
 
+def create_uielem(find_result):
+    uielem = UiElement(find_result['object'], **find_result['locator'])
+    index = find_result.get('index')
+    if index is not None:
+        uielem = uielem.set_index(index)
+    return uielem
+
+
 class UiautomatorDevice(object):
     """Device class"""
 
@@ -295,37 +293,6 @@ class UiautomatorDevice(object):
         in order to mark it is obsolete"""
         self._objfinder.set_hierarchy_dump(None)
 
-    def find_element_contains(self, coord, **criteria):
-        """Finds the element which contains given coordinate and
-        meets given criteria
-
-        Args:
-            coord (tuple): coordinate (x, y)
-            criteria (dict): criteria ex)clickable=True, enabled=True
-        Returns:
-            element (object): UI element object
-        """
-        uia_criteria = dict(criteria)
-        ignore_distant_element = uia_criteria.pop(
-            'ignore_distant_element', True)
-        result = self._objfinder.find_object_contains(
-            coord, ignore_distant_element, **uia_criteria)
-        if result is None:
-            raise UiObjectNotFound('({0}, {1})'.format(*coord))
-
-        obj = result['object']
-        index = result.get('index')
-        if not hasattr(obj, 'click'):
-            obj = self._device(**result['locator'])
-            if index is not None:
-                obj = obj[index]
-            else:
-                obj = obj[0]
-        uielem = UiElement(obj, **result['locator'])
-        if index is not None:
-            uielem = uielem.set_index(index)
-        return uielem
-
     def get_screenshot_as_file(self, file_path):
         """Aquires screenshot from the device and save it as a file
 
@@ -354,10 +321,11 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
         """
         try:
-            uielement = self.find_element_contains(
-                coord, className='android.widget.EditText')
+            uielement = create_uielem(
+                self._objfinder.find_object_contains(
+                    coord, True, className='android.widget.EditText'))
             self.set_text(uielement, keys, record=record)
-        except UiObjectNotFound:
+        except uiobjectfinder.UiObjectNotFound:
             for k in self._chars_to_keys(keys):
                 self.press_key(k[0], meta=k[1], record=record)
 
@@ -369,10 +337,10 @@ class UiautomatorDevice(object):
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = self.find_element_contains(
-            coord, className='android.widget.EditText')
-        if uielement is not None:
-            uielement.clear_text(record=record)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                coord, True, className='android.widget.EditText'))
+        uielement.clear_text(record=record)
 
     def press_key(self, key_name, meta=None, record=_null_record):
         """Press the key specified
@@ -421,8 +389,9 @@ class UiautomatorDevice(object):
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = self.find_element_contains(coord,
-                                               clickable=True, enabled=True)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                coord, True, clickable=True, enabled=True))
         uielement.click(wait=wait, record=record)
 
     def long_click_xy(self, coord, record=_null_record):
@@ -442,11 +411,10 @@ class UiautomatorDevice(object):
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = self.find_element_contains(coord,
-                                               longClickable=True,
-                                               enabled=True)
-        if uielement is not None:
-            uielement.long_click(record=record)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                coord, True, longClickable=True, enabled=True))
+        uielement.long_click(record=record)
 
     def drag_xy_to_xy(self, start, end, record=_null_record, **options):
         """Performs drag action from start point to end point
@@ -472,9 +440,9 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielementS = self.find_element_contains(start)
-        if uielementS is not None:
-            uielementS.drag_to_xy(*end, record=record, **options)
+        uielementS = create_uielem(
+            self._objfinder.find_object_contains(start, True))
+        uielementS.drag_to_xy(*end, record=record, **options)
 
     def drag_object_to_object(self, start, end,
                               record=_null_record, **options):
@@ -487,11 +455,11 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielementS = self.find_element_contains(start)
-        if uielementS is not None:
-            uielementE = self.find_element_contains(end)
-            if uielementE is not None:
-                uielementS.drag_to_object(uielementE, record=record, **options)
+        uielementS = create_uielem(
+            self._objfinder.find_object_contains(start, True))
+        uielementE = create_uielem(
+            self._objfinder.find_object_contains(end, True))
+        uielementS.drag_to_object(uielementE, record=record, **options)
 
     def swipe(self, start, end, record=_null_record, **options):
         """Performs swipe action from start point to end point
@@ -516,11 +484,10 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(start,
-                                               scrollable=True,
-                                               ignore_distant_element=False)
-        if uielement is not None:
-            uielement.swipe(direction, record=record, **options)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                start, False, scrollable=True))
+        uielement.swipe(direction, record=record, **options)
 
     def pinch(self, in_or_out, coord, percent, record=_null_record, **options):
         """Performs pinch action on the object locates on coord
@@ -537,12 +504,12 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(
-            coord, className='android.view.View', enabled=True)
-        if uielement is not None:
-            kwargs = dict(options)
-            kwargs.update({'percent': percent})
-            uielement.pinch(in_or_out, record=record, **kwargs)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                coord, True, className='android.view.View', enabled=True))
+        kwargs = dict(options)
+        kwargs.update({'percent': percent})
+        uielement.pinch(in_or_out, record=record, **kwargs)
 
     def fling(self, start, orientation, action,
               record=_null_record, **options):
@@ -558,11 +525,10 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(start,
-                                               scrollable=True,
-                                               ignore_distant_element=False)
-        if uielement is not None:
-            uielement.fling(orientation, action, record=record, **options)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                start, False, scrollable=True))
+        uielement.fling(orientation, action, record=record, **options)
 
     def scroll(self, start, orientation, action,
                record=_null_record, **options):
@@ -578,11 +544,10 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(start,
-                                               scrollable=True,
-                                               ignore_distant_element=False)
-        if uielement is not None:
-            uielement.scroll(orientation, action, record=record, **options)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                start, False, scrollable=True))
+        uielement.scroll(orientation, action, record=record, **options)
 
     def scroll_to(self, start, orientation, target_selector_kwargs,
                   record=_null_record, **options):
@@ -600,13 +565,12 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = self.find_element_contains(start,
-                                               scrollable=True,
-                                               ignore_distant_element=False)
-        if uielement is not None:
-            scroll_kwargs = dict(target_selector_kwargs)
-            scroll_kwargs.update(options)
-            uielement.scroll(orientation, 'to', record=record, **scroll_kwargs)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                start, False, scrollable=True))
+        scroll_kwargs = dict(target_selector_kwargs)
+        scroll_kwargs.update(options)
+        uielement.scroll(orientation, 'to', record=record, **scroll_kwargs)
 
     def get_info(self, start, **criteria):
         """Returns UI object inforamtion
@@ -620,7 +584,8 @@ class UiautomatorDevice(object):
         Returns:
             dict: UI object's information
         """
-        uielement = self.find_element_contains(start, **criteria)
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(start, True, **criteria))
         return dict(uielement.info)
 
     def set_orientation(self, orientation, record=_null_record):
@@ -675,10 +640,11 @@ class UiautomatorDevice(object):
             timeout (integer): timeout in msec
             record (function): record function for generating a script
         """
-        uielement = self.find_element_contains(start, enabled=True)
-        if uielement is not None:
-            options = {}
-            if timeout is not None:
-                options['timeout'] = timeout
-            record(_build_method_call_str(
-                '{0}.wait.{1}'.format(uielement, for_what), **options))
+        uielement = create_uielem(
+            self._objfinder.find_object_contains(
+                start, True, enabled=True))
+        options = {}
+        if timeout is not None:
+            options['timeout'] = timeout
+        record(_build_method_call_str(
+            '{0}.wait.{1}'.format(uielement, for_what), **options))

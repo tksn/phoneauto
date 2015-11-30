@@ -36,7 +36,7 @@ def test_find_contains_clickable(mocks):
     x, y = 150, 1280
     result = finder.find_object_contains(
         (x, y), False, clickable=True, enabled=True)
-    assert result['object'].info['text'] == 'Gmail'
+    mocks.device.assert_called_with(description='Gmail')
 
 
 def test_find_contains_textContains(mocks):
@@ -44,7 +44,7 @@ def test_find_contains_textContains(mocks):
     x, y = 150, 1280
     result = finder.find_object_contains(
         (x, y), False, textContains='mai', enabled=True)
-    assert result['object'].info['text'] == 'Gmail'
+    mocks.device.assert_called_with(description='Gmail')
 
 
 def test_find_contains_textStartsWith(mocks):
@@ -52,7 +52,7 @@ def test_find_contains_textStartsWith(mocks):
     x, y = 150, 1280
     result = finder.find_object_contains(
         (x, y), False, textStartsWith='Gmai', enabled=True)
-    assert result['object'].info['text'] == 'Gmail'
+    mocks.device.assert_called_with(description='Gmail')
 
 
 def test_find_contains_textMatches(mocks):
@@ -60,7 +60,7 @@ def test_find_contains_textMatches(mocks):
     x, y = 150, 1280
     result = finder.find_object_contains(
         (x, y), False, textMatches='.+ail$', enabled=True)
-    assert result['object'].info['text'] == 'Gmail'
+    mocks.device.assert_called_with(description='Gmail')
 
 
 def test_find_contains_index(mocks):
@@ -68,7 +68,7 @@ def test_find_contains_index(mocks):
     x, y = 700, 1300
     result = finder.find_object_contains(
         (x, y), False, index=5, enabled=True)
-    assert result['object'].info['text'] == 'Camera'
+    mocks.device.assert_called_with(description='Camera')
 
 
 def test_find_contains_notimplemented(mocks):
@@ -108,13 +108,7 @@ def test_find_contains_by_className(mocks):
     cname = 'android.appwidget.AppWidgetHostView'
     result = finder.find_object_contains(
         (x, y), False, className=cname)
-    assert result['object'].info['contentDescription'] == 'Google App'
-    assert result['object'].info['className'] == cname
-    assert result['object'].info['checkable'] == False
-    assert result['object'].info['enabled'] == True
-    assert result['object'].info['bounds'] == {
-        'left': 8, 'top': 780, 'right': 1073, 'bottom': 1110
-    }
+    mocks.device.assert_called_with(description='Google App')
 
 
 def test_find_contains_by_description(mocks):
@@ -122,7 +116,7 @@ def test_find_contains_by_description(mocks):
     x, y = 500, 900
     result = finder.find_object_contains(
         (x, y), False, description='Google App')
-    assert result['object'].info['contentDescription'] == 'Google App'
+    mocks.device.assert_called_with(description='Google App')
 
 
 def test_find_contains_by_resourceId(mocks):
@@ -130,32 +124,7 @@ def test_find_contains_by_resourceId(mocks):
     x, y = 500, 900
     rid = 'com.google.android.googlequicksearchbox:id/search_widget_voice_hint'
     result = finder.find_object_contains((x, y), False, resourceId=rid)
-    assert result['object'].info['text'] == 'Say "Ok Google"'
-    assert result['object'].info['resourceName'] == rid
-
-
-OUTSCR_BOUNDS_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
-<hierarchy rotation="0">
-  <node index="0" text="" resource-id=""
-    class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
-    content-desc="" checkable="false" checked="false" clickable="false"
-    enabled="true" focusable="false" focused="false" scrollable="false"
-    long-clickable="false" password="false" selected="false"
-    bounds="[-10,-10][1090,1930]">
-  </node>
-</hierarchy>
-"""
-
-
-def test_find_contains_outscr_bounds(mocks):
-    finder = uiobjectfinder.UiObjectFinder(mocks.device)
-    hd = view_hierarchy_dump.ViewHierarchyDump(DEVICE_INFO, OUTSCR_BOUNDS_XML)
-    finder.set_hierarchy_dump(hd)
-    x, y = 500, 900
-    result = finder.find_object_contains((x, y), False, focused=False)
-    assert result['object'].info['visibleBounds'] == {
-        'left': 0, 'top': 0, 'right': 1080, 'bottom': 1920
-    }
+    mocks.device.assert_called_with(resourceId=rid)
 
 
 NOUNIQUENODE_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
@@ -186,3 +155,52 @@ def test_find_contains_has_non_unique(mocks):
     result = finder.find_object_contains(
         (x, y), False, className='android.widget.FrameLayout')
     assert 'index' in result
+
+
+# class _Object(object): pass
+#
+#
+# def test_find_element_outside_rect(mocks):
+#     elem = _Object()
+#     elem.info = uia_element_info(visibleBounds=bounds(0, 0, 10, 10))
+#     mocks.device.return_value = [ elem ]
+#     d = uiautomator_device.UiautomatorDevice()
+#     with pytest.raises(uiobjectfinder.UiObjectNotFound):
+#         d.find_element_contains((11, 11))
+
+
+# DUMP_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+# <hierarchy rotation="0">
+#   <node index="0" text="" resource-id=""
+#     class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
+#     content-desc="" checkable="false" checked="false" clickable="false"
+#     enabled="true" focusable="false" focused="false" scrollable="false"
+#     long-clickable="false" password="false" selected="false"
+#     bounds="[0,0][64,32]">
+#   </node>
+#   <node index="0" text="" resource-id=""
+#     class="android.widget.FrameLayout" package="com.sec.android.app.launcher"
+#     content-desc="" checkable="false" checked="false" clickable="false"
+#     enabled="true" focusable="false" focused="false" scrollable="false"
+#     long-clickable="false" password="false" selected="false"
+#     bounds="[0,32][64,64]">
+#   </node>
+# </hierarchy>
+# """
+#
+#
+# def test_update_view_hierarchy_dump(mocks):
+#     mocks.device.dump.return_value = DUMP_XML
+#     elem0 = _Object()
+#     elem0.info = uia_element_info(text='abc')
+#     elem1 = _Object()
+#     elem1.info = uia_element_info(text='def')
+#     mocks.device.return_value = [elem0, elem1]
+#     d = uiautomator_device.UiautomatorDevice()
+#     d.update_view_hierarchy_dump()
+#     uielem = d.find_element_contains(
+#         (32, 48),
+#         ignore_distant_element=False,
+#         className='android.widget.FrameLayout')
+#     assert uielem.info['text'] == 'def'
+#     assert uielem._index == 1

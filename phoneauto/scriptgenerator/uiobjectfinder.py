@@ -5,6 +5,16 @@ import math
 import sys
 
 
+class UiObjectNotFound(Exception):
+
+    def __init__(self, message):
+        super(UiObjectNotFound, self).__init__()
+        self.message = message
+
+    def __str__(self):
+        return 'UiObjectNotFound: ' + self.message
+
+
 class UiObjectFinder(object):
 
     _FIND_OBJECT_DISTANCE_THRESH = 200
@@ -21,13 +31,19 @@ class UiObjectFinder(object):
             coord, ignore_distant, **criteria)
         smallest = self._select_smallest_object(objects)
         if smallest is None:
-            return None
-        locator = self._determine_locator(smallest['info'])
-        retval = {'object': smallest['object']}
+            raise UiObjectNotFound('({0}, {1})'.format(*coord))
+
+        index = None
+        locator = self._determine_locator(smallest['object']['info'])
         if locator is None:
-            retval.update({'locator': criteria, 'index': smallest['index']})
-        else:
-            retval.update({'locator': locator})
+            locator = criteria
+            index = smallest['index']
+        inst = smallest['object'].get('instance')
+        if inst is None:
+            inst = self._device(**locator)[0 if index is None else index]
+        retval = {'object': inst, 'locator': locator}
+        if index is not None:
+            retval.update({'index': index})
         return retval
 
     def _find_objects_contains(self, coord, ignore_distant, **criteria):
@@ -46,9 +62,8 @@ class UiObjectFinder(object):
 
         objects = self._find_objects(**criteria)
         for i, obj in enumerate(objects):
-            info = obj.info
-            if xy_in_rect(info['visibleBounds']):
-                yield (i, obj, info)
+            if xy_in_rect(obj['info']['visibleBounds']):
+                yield (i, obj)
 
     @staticmethod
     def _select_smallest_object(object_enum):
@@ -57,24 +72,28 @@ class UiObjectFinder(object):
             return (r['bottom'] - r['top']) * (r['right'] - r['left'])
 
         min_obj = (sys.maxsize, )
-        for i, obj, info in object_enum:
-            area = rect_area(info['visibleBounds'])
+        for i, obj in object_enum:
+            area = rect_area(obj['info']['visibleBounds'])
             if area < min_obj[0]:
-                min_obj = (area, i, obj, info)
+                min_obj = (area, i, obj)
         if len(min_obj) == 1:
             return None
-        return {'index': min_obj[1], 'object': min_obj[2], 'info': min_obj[3]}
+        return {'index': min_obj[1], 'object': min_obj[2]}
 
     def _find_objects(self, **criteria):
         if self._hierarchy_dump is None:
-            return self._device(**criteria)
-        return self._hierarchy_dump.find_objects(**criteria)
+            for obj in self._device(**criteria):
+                yield {'instance': obj, 'info': obj.info}
+        else:
+            infos = self._hierarchy_dump.find_objects(**criteria)
+            for info in infos:
+                yield {'info': info}
 
     def _determine_locator(self, info):
         """Determines locator and creates UI element object"""
 
         def unique(**criteria):
-            objects = self._find_objects(**criteria)
+            objects = list(self._find_objects(**criteria))
             if len(objects) == 1:
                 return True
             return False
