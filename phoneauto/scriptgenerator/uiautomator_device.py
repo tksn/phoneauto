@@ -126,8 +126,8 @@ class UiElement(object):
             self._impl.click()
             method_str = 'click()'
         else:
-            self._impl.click.wait(**wait)
-            method_str = _build_method_call_str('click.wait', **wait)
+            self._impl.click.wait(timeout=wait)
+            method_str = _build_method_call_str('click.wait', timeout=wait)
         record('{0}.{1}'.format(self, method_str))
 
     def long_click(self, record=_null_record):
@@ -382,11 +382,12 @@ class UiautomatorDevice(object):
         self._device.click(*coord)
         record('{{instance}}.click({0}, {1})'.format(*coord))
 
-    def click_object(self, coord, wait, record=_null_record):
+    def click_object(self, coord, wait=None, record=_null_record):
         """Clicks on a object which contains the specified coordinate
 
         Args:
             coord (tuple): Coordinate (x, y)
+            wait (integer): wait timeout in milliseconds. None means no-wait
             record (function): optional record() for generating a script
         """
         uielement = create_uielem(
@@ -549,8 +550,8 @@ class UiautomatorDevice(object):
                 start, False, scrollable=True))
         uielement.scroll(orientation, action, record=record, **options)
 
-    def scroll_to(self, start, orientation, target_selector_kwargs,
-                  record=_null_record, **options):
+    def scroll_to(self, start, orientation,
+                  record=_null_record, **kwargs):
         """Scroll until the item determined by target_selector_kwargs
         is displayed
 
@@ -563,16 +564,16 @@ class UiautomatorDevice(object):
                 dict which contain key-value pairs to locate the target.
                 ex) {'text': 'Lock screen'}
             record (function): optional record() for generating a script
-            options (dict): optional key-value pairs.  ex)steps=100
+            kwargs (dict):
+                dict which contain key-value pairs to locate the target.
+                ex) {'text': 'Lock screen'}
         """
         uielement = create_uielem(
             self._objfinder.find_object_contains(
                 start, False, scrollable=True))
-        scroll_kwargs = dict(target_selector_kwargs)
-        scroll_kwargs.update(options)
-        uielement.scroll(orientation, 'to', record=record, **scroll_kwargs)
+        uielement.scroll(orientation, 'to', record=record, **kwargs)
 
-    def get_info(self, start, **criteria):
+    def get_info(self, start, criteria):
         """Returns UI object inforamtion
 
         Args:

@@ -31,5 +31,5 @@ def test_get_info_on_non_element(mocks):
     mocks.device.return_value = []
     d = uiautomator_device.UiautomatorDevice()
     with pytest.raises(uiobjectfinder.UiObjectNotFound):
-        d.get_info((0, 0))
+        d.get_info((0, 0), criteria={})
 

@@ -14,6 +14,251 @@ import uuid
 from PIL import Image
 
 
+_command_table = {}
+
+
+def command(name):
+    def command_decorator(func):
+        _command_table[name] = func
+        return func
+    return command_decorator
+
+
+def _kwarg(name, to_name=None, default=None):
+    to_name = to_name or name
+
+    def transform(kwargs):
+        return (to_name, kwargs.get(name, default))
+    return transform
+
+
+def _create_command(command_name,
+                    device_method_name,
+                    kwarg_list=(),
+                    retval_transform=None):
+    retval_transform = retval_transform or (lambda x: x)
+
+    @command(command_name)
+    def command_func(device, **command_kwargs):
+        method_kwargs = {}
+        for kwarg_produce in kwarg_list:
+            kwarg = kwarg_produce(command_kwargs)
+            if isinstance(kwarg, list):
+                method_kwargs.update(dict(kwarg))
+            else:
+                method_kwargs[kwarg[0]] = kwarg[1]
+        device_method = getattr(device, device_method_name)
+        return retval_transform(device_method(**method_kwargs))
+    return command_func
+
+
+_create_command(command_name='update_view_dump',
+                device_method_name='update_view_hierarchy_dump')
+
+
+@command('get_screenshot')
+def _get_screenshot(device, **_):
+    """Gets device's screenshot"""
+    file_path = os.path.join(tempfile.gettempdir(),
+                             'tmp_{0}.png'.format(uuid.uuid4()))
+    success = device.get_screenshot_as_file(file_path)
+    if not success:
+        return None
+    return Image.open(file_path)
+
+_create_command(command_name='press_key',
+                device_method_name='press_key',
+                kwarg_list=(_kwarg('key_name'),
+                            _kwarg('meta'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='open_notification',
+                device_method_name='open_notification',
+                kwarg_list=(_kwarg('recorder', to_name='record'),))
+
+_create_command(command_name='open_quick_settings',
+                device_method_name='open_quick_settings',
+                kwarg_list=(_kwarg('recorder', to_name='record'),))
+
+_create_command(command_name='clear_text',
+                device_method_name='clear_text',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='enter_text',
+                device_method_name='find_send_keys',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('text', to_name='keys'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='click_xy',
+                device_method_name='click_xy',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='click_object',
+                device_method_name='click_object',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('wait'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='long_click_xy',
+                device_method_name='long_click_xy',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='long_click_object',
+                device_method_name='long_click_object',
+                kwarg_list=(_kwarg('start', to_name='coord'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='drag_xy_to_xy',
+                device_method_name='drag_xy_to_xy',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='drag_object_to_xy',
+                device_method_name='drag_object_to_xy',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='drag_object_to_object',
+                device_method_name='drag_object_to_object',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('recorder', to_name='record')))
+
+
+_create_command(command_name='swipe_xy_to_xy',
+                device_method_name='swipe',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('recorder', to_name='record'),
+                            _kwarg('steps')))
+
+
+def _swipe_direction(kwargs):
+    start, end = kwargs['start'], kwargs['end']
+    xdiff, ydiff = end[0] - start[0], end[1] - start[1]
+    if abs(xdiff) > abs(ydiff):
+        direction = 'right' if xdiff >= 0 else 'left'
+    else:
+        direction = 'down' if ydiff >= 0 else 'up'
+    return ('direction', direction)
+
+
+_create_command(command_name='swipe_object_with_direction',
+                device_method_name='swipe_object',
+                kwarg_list=(_kwarg('start'),
+                            _swipe_direction,
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='pinch',
+                device_method_name='pinch',
+                kwarg_list=(_kwarg('in_or_out'),
+                            _kwarg('start', to_name='coord'),
+                            _kwarg('percent'),
+                            _kwarg('steps'),
+                            _kwarg('recorder', to_name='record')))
+
+
+def _fling_scroll_orientation(kwargs):
+    start, end = kwargs['start'], kwargs['end']
+    xdiff, ydiff = end[0] - start[0], end[1] - start[1]
+    if abs(xdiff) > abs(ydiff):
+        return {'orientation': 'horiz', 'diff': xdiff}
+    else:
+        return {'orientation': 'vert', 'diff': ydiff}
+
+
+def _fling_scroll_orientation_arg(kwargs):
+    return (
+        'orientation',
+        _fling_scroll_orientation(kwargs)['orientation'])
+
+
+def _fling_scroll_action(to_end):
+    forward = 'toEnd' if to_end else 'forward'
+    backward = 'toBeginning' if to_end else 'backward'
+
+    def get_arg(kwargs):
+        diff = _fling_scroll_orientation(kwargs)['diff']
+        return ('action', backward if diff >= 0 else forward)
+    return get_arg
+
+
+_create_command(command_name='fling',
+                device_method_name='fling',
+                kwarg_list=(_kwarg('start'),
+                            _fling_scroll_orientation_arg,
+                            _fling_scroll_action(to_end=False),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='fling_to_end',
+                device_method_name='fling',
+                kwarg_list=(_kwarg('start'),
+                            _fling_scroll_orientation_arg,
+                            _fling_scroll_action(to_end=True),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='scroll',
+                device_method_name='scroll',
+                kwarg_list=(_kwarg('start'),
+                            _fling_scroll_orientation_arg,
+                            _fling_scroll_action(to_end=False),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='scroll_to_end',
+                device_method_name='scroll',
+                kwarg_list=(_kwarg('start'),
+                            _fling_scroll_orientation_arg,
+                            _fling_scroll_action(to_end=True),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='scroll_to',
+                device_method_name='scroll_to',
+                kwarg_list=(lambda kwargs: list(kwargs.items()),
+                            _fling_scroll_orientation_arg,
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='get_object_info',
+                device_method_name='get_info',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('criteria', default={})))
+
+_create_command(command_name='set_orientation',
+                device_method_name='set_orientation',
+                kwarg_list=(_kwarg('orientation'),
+                            _kwarg('recorder', to_name='record')))
+
+
+def _png_filename_generate(_):
+    filename = ("datetime.today()"
+                ".strftime('screenshot_%Y%m%d_%H%M%S_%f.png')")
+    return ('file', filename)
+
+
+_create_command(command_name='insert_screenshot_capture',
+                device_method_name='record_screenshot_capture',
+                kwarg_list=(_png_filename_generate,
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='insert_wait',
+                device_method_name='record_wait',
+                kwarg_list=(_kwarg('for_what'),
+                            _kwarg('timeout'),
+                            _kwarg('recorder', to_name='record')))
+
+_create_command(command_name='insert_wait_object',
+                device_method_name='record_wait_object',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('for_what'),
+                            _kwarg('timeout'),
+                            _kwarg('recorder', to_name='record')))
+
+
 class ScriptGenerator(object):
     """Script generation controller class"""
 
@@ -29,463 +274,9 @@ class ScriptGenerator(object):
         self.devices = devices
         self.writer = writer
 
-    def update_view_dump(self, device_index=0):
-        self.devices[device_index].update_view_hierarchy_dump()
-
-    def get_screenshot(self, device_index=0):
-        """Gets device's screenshot
-
-        Args:
-            device_index (integer):
-                The index of the device from which a screenshot is taken
-        Returns:
-            PIL.Image: A screenshot image object if succeeded, otherwise, None.
-        """
-        file_path = os.path.join(tempfile.gettempdir(),
-                                 'tmp_{0}.png'.format(uuid.uuid4()))
-        success = self.devices[device_index].get_screenshot_as_file(file_path)
-        if not success:
-            return None
-        return Image.open(file_path)
-
-    def press_key(self, command_args, device_index=0):
-        """Presses a key of the device
-
-        Args:
-            command_args['key_name'] (text):
-                key name  ex) 'HOME', 'BACK' etc.
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].press_key(
-            command_args['key_name'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def open_notification(self, _, device_index=0):
-        """Opens notification panel
-
-        Args:
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].open_notification(
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def open_quick_settings(self, _, device_index=0):
-        """Opens Quick Settings panel
-
-        Args:
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].open_quick_settings(
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def clear_text(self, command_args, device_index=0):
-        """Clears text on the target UI object
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of the target object
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].clear_text(
-            command_args['start'],
-            record=self.writer.get_recorder(device_index))
-
-    def enter_text(self, command_args, device_index=0):
-        """Sets text to the target UI object
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of the target object
-            command_args['text'] (text):
-                characters which are sent to the target object
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].find_send_keys(
-            command_args['start'], command_args['text'],
-            record=self.writer.get_recorder(device_index))
-
-    def click_xy(self, command_args, device_index=0):
-        """Clicks on a pixel
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of the target pixel
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].click_xy(
-            command_args['start'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def click_object(self, command_args, device_index=0):
-        """Clicks on a UI object
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of a pixel which is contained
-                in the target object
-            command_args['wait'] (boolean):
-                True if perform 'click and wait update', False otherwise
-            command_args['timeout'] (integer):
-                timeout for wait in milliseconds. not used when no wait
-            device_index (integer):
-                The index of the device
-        """
-        wait = None
-        if command_args.get('wait', False):
-            wait = {}
-            timeout = command_args.get('timeout')
-            if timeout is not None:
-                wait['timeout'] = timeout
-        self.devices[device_index].click_object(
-            command_args['start'], wait,
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def long_click_xy(self, command_args, device_index=0):
-        """Long-clicks on a pixel
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of the target pixel
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].long_click_xy(
-            command_args['start'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def long_click_object(self, command_args, device_index=0):
-        """Long-clicks on a UI object
-
-        Args:
-            command_args['start'] (tuple):
-                Coordinate (x, y) of the target UI object
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].long_click_object(
-            command_args['start'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def drag_xy_to_xy(self, command_args, device_index=0):
-        """Performs drag-and-drop action with specifying
-        start and end point coordinates
-
-        Args:
-            command_args['start'] (tuple):
-                Start point coordinate (x, y) of the drag action
-            command_args['end'] (tuple):
-                End point coordinate (x, y) of the drag action
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].drag_xy_to_xy(
-            command_args['start'], command_args['end'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def drag_object_to_xy(self, command_args, device_index=0):
-        """Performs drag-and-drop action with specifying
-        a start UI object and an end point coordinate
-
-        Args:
-            command_args['start'] (tuple):
-                The coordinate (x, y) of the UI element to drag
-            command_args['end'] (tuple):
-                The coordinate (x, y) on which the drag action ends
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].drag_object_to_xy(
-            command_args['start'], command_args['end'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def drag_object_to_object(self, command_args, device_index=0):
-        """Performs drag-and-drop action with specifying
-        a start and an destination UI object
-
-        Args:
-            command_args['start'] (tuple):
-                The coordinate (x, y) of the UI element to drag
-            command_args['end'] (tuple):
-                The coordinate (x, y) of the destination UI element
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].drag_object_to_object(
-            command_args['start'], command_args['end'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def swipe_xy_to_xy(self, command_args, device_index=0):
-        """Performs swipe action with specifying
-        start and end point coordinates
-
-        Args:
-            command_args['start'] (tuple):
-                Start point coordinate (x, y) of the swipe action
-            command_args['end'] (tuple):
-                End point coordinate (x, y) of the swipe action
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].swipe(
-            command_args['start'], command_args['end'], steps=10,
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def swipe_object_with_direction(self, command_args, device_index=0):
-        """Swipes a UI object toward specified direction
-
-        Args:
-            command_args['start'] (tuple):
-                Start ui element's  coordinate (x, y)
-            command_args['end'] (tuple):
-                Destination coordinate (x, y) which is used to
-                determine swipe direction
-            device_index (integer):
-                The index of the device
-        """
-        start, end = command_args['start'], command_args['end']
-        xdiff, ydiff = end[0] - start[0], end[1] - start[1]
-        if abs(xdiff) > abs(ydiff):
-            direction = 'right' if xdiff >= 0 else 'left'
-        else:
-            direction = 'down' if ydiff >= 0 else 'up'
-        self.devices[device_index].swipe_object(
-            start, direction,
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def pinch(self, command_args, device_index=0):
-        """Performs pinch-in(edge-to-center)/pinch-out(center-to-edge) action
-
-        Args:
-            command_args['in_or_out'] (tuple):
-                'In'(edge-to-center) or 'Out'(center-to-edge)
-            command_args['start'] (tuple):
-                coordinate (x, y) of the UI object which is to pinch-in'ed
-            command_args['percent'] (integer):
-                percentage of the element's diagonal length
-                for the pinch gesture
-            command_args['steps'] (integer):
-                the number of steps for the gesture.
-                Steps are injected about 5 milliseconds apart,
-                so 100 steps may take around 0.5 seconds to complete.
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].pinch(
-            command_args['in_or_out'], command_args['start'],
-            command_args['percent'], steps=command_args['steps'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    @staticmethod
-    def _fling_scroll_args(start, end, to_end):
-        """Prepares scroll/fling arguments (orientatin and action)"""
-        xdiff, ydiff = end[0] - start[0], end[1] - start[1]
-        args_dict = {}
-        args_dict['start'] = start
-        if abs(xdiff) > abs(ydiff):
-            args_dict['orientation'] = 'horiz'
-            diff = xdiff
-        else:
-            args_dict['orientation'] = 'vert'
-            diff = ydiff
-        forward = 'toEnd' if to_end else 'forward'
-        backward = 'toBeginning' if to_end else 'backward'
-        args_dict['action'] = backward if diff >= 0 else forward
-        return args_dict
-
-    def fling(self, command_args, device_index=0):
-        """Performs fling action on a scrollable UI object
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) which is contained in
-                the scrollable UI object
-            command_args['end'] (integer):
-                coordinate (x, y) which is used to determine fling direction
-            device_index (integer):
-                The index of the device
-        """
-        args = self._fling_scroll_args(
-            command_args['start'], command_args['end'], False)
-        self.devices[device_index].fling(
-            args['start'], args['orientation'], args['action'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def fling_to_end(self, command_args, device_index=0):
-        """Performs fling action on a scrollable UI object until
-        it reaches its beginning or end
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) which is contained in
-                the scrollable UI object
-            command_args['end'] (integer):
-                coordinate (x, y) which is used to determine fling direction
-            device_index (integer):
-                The index of the device
-        """
-        args = self._fling_scroll_args(
-            command_args['start'], command_args['end'], True)
-        self.devices[device_index].fling(
-            args['start'], args['orientation'], args['action'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def scroll(self, command_args, device_index=0):
-        """Performs scroll action on a scrollable UI object
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) which is contained in
-                the scrollable UI object
-            command_args['end'] (integer):
-                coordinate (x, y) which is used to determine scroll direction
-            device_index (integer):
-                The index of the device
-        """
-        args = self._fling_scroll_args(
-            command_args['start'], command_args['end'], False)
-        self.devices[device_index].scroll(
-            args['start'], args['orientation'], args['action'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def scroll_to_end(self, command_args, device_index=0):
-        """Performs scroll action on a scrollable UI object until
-        it reaches its beginning or end
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) which is contained in
-                the scrollable UI object
-            command_args['end'] (integer):
-                coordinate (x, y) which is used to determine fling direction
-            device_index (integer):
-                The index of the device
-        """
-        args = self._fling_scroll_args(
-            command_args['start'], command_args['end'], True)
-        self.devices[device_index].scroll(
-            args['start'], args['orientation'], args['action'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def scroll_to_text(self, command_args, device_index=0):
-        """Performs scroll action on a scrollable UI object until
-        an item of the object specified by text value is displayed
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) which is contained in
-                the scrollable UI object
-            command_args['end'] (integer):
-                coordinate (x, y) which is used to determine fling direction
-            command_args['text'] (text):
-                text value of the item which is to be displayed
-            device_index (integer):
-                The index of the device
-        """
-        args = self._fling_scroll_args(
-            command_args['start'], command_args['end'], True)
-        selector_kwargs = {'text': command_args['text']}
-        self.devices[device_index].scroll_to(
-            args['start'], args['orientation'], selector_kwargs,
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def get_object_info(self, command_args, device_index=0):
-        """Returns UI object's information
-
-        Args:
-            command_args['start'] (tuple):
-                coordinate (x, y) on which the UI object is located
-            command_args['criteria'] (dict):
-                UI object selector key-value pairs ex) {'text': 'OK'}
-            device_index (integer):
-                The index of the device
-        Returns:
-            dict: UI object's information
-        """
-        info = self.devices[device_index].get_info(
-            command_args['start'],
-            **command_args.get('criteria', {}))
-        return info if info else {}
-
-    def set_orientation(self, command_args, device_index=0):
-        """sets the device's orientation
-
-        Args:
-            command_args['orientation'] (string):
-                'natural', 'left', 'right', 'upsidedown' or 'unfreeze'
-            device_index (integer):
-                The index of the device
-        """
-        self.devices[device_index].set_orientation(
-            command_args['orientation'],
-            record=self.writer.get_recorder(device_index))
-        self.devices[device_index].invalidate_view_hierarchy_dump()
-
-    def insert_screenshot_capture(self, _, device_index=0):
-        """Insert screenshot capture statement into the script
-
-        Args:
-            device_index (integer):
-                The index of the device
-        """
-        filename = ("datetime.today()"
-                    ".strftime('screenshot_%Y%m%d_%H%M%S_%f.png')")
-        self.devices[device_index].record_screenshot_capture(
-            filename,
-            record=self.writer.get_recorder(device_index))
-
-    def insert_wait(self, command_args, device_index=0):
-        """Insert wait statement into the script
-
-        Args:
-            command_args['for_what'] (string): 'idle' or 'update'
-            command_args['timeout'] (integer): timeout in msec
-            device_index (integer):
-                The index of the device
-        """
-        for_what = command_args.get('for_what', 'idle')
-        timeout = command_args.get('timeout')
-        self.devices[device_index].record_wait(
-            for_what, timeout,
-            record=self.writer.get_recorder(device_index))
-
-    def insert_wait_object(self, command_args, device_index=0):
-        """Insert wait-object statement into the script
-
-        Args:
-            command_args['start'] (tuple):
-                (x, y) coordinates on which the object locates
-            command_args['for_what'] (string): 'exists' or 'gone'
-            command_args['timeout'] (integer): timeout in msec
-            device_index (integer):
-                The index of the device
-        """
-        for_what = command_args.get('for_what', 'exists')
-        timeout = command_args.get('timeout')
-        self.devices[device_index].record_wait_object(
-            command_args['start'],
-            for_what, timeout,
-            record=self.writer.get_recorder(device_index))
+    def execute(self, command_name, command_args=None, device_index=0):
+        command_args = command_args or {}
+        cmd = _command_table.get(command_name)
+        kwargs = dict(command_args)
+        kwargs['recorder'] = self.writer.get_recorder(device_index)
+        return cmd(self.devices[device_index], **kwargs)

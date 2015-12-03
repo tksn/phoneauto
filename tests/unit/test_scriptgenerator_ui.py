@@ -14,8 +14,8 @@ def create_scriptgenerator_ui():
 
 def test_acquire_screen(mocks):
     ui = create_scriptgenerator_ui()
-    ui._controller.get_screenshot = Mock()
-    ui._controller.get_screenshot.return_value = None
+    ui._controller.execute = Mock()
+    ui._controller.execute.return_value = None
     with pytest.raises(RuntimeError):
         ui._acquire_screen()
 

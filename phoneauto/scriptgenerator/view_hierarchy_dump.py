@@ -8,11 +8,14 @@ import xml.etree.ElementTree as ET
 def _equals(search_str, attr_str):
     return search_str == attr_str
 
+
 def _contains(search_str, attr_str):
     return search_str in attr_str
 
+
 def _startswith(search_str, attr_str):
     return attr_str.startswith(search_str)
+
 
 def _matches(search_str, attr_str):
     return bool(re.search(search_str, attr_str))

@@ -203,62 +203,55 @@ class ScriptGeneratorUI(object):
     def _initialize(self):
         """Initialization after controller became available"""
         self._root.nametowidget('mainframe.back_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='BACK'))
+            command=self.__get_command_wrap('press_key', key_name='BACK'))
         self._root.nametowidget('mainframe.home_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='HOME'))
+            command=self.__get_command_wrap('press_key', key_name='HOME'))
         self._root.nametowidget('mainframe.recent_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='APP_SWITCH'))
+            command=self.__get_command_wrap('press_key',
+                                            key_name='APP_SWITCH'))
 
         self._root.nametowidget('sidebar.refresh_button').config(
             command=self._acquire_screen)
         self._root.nametowidget('sidebar.screenshot_button').config(
             command=self._take_screenshot)
         self._root.nametowidget('sidebar.power_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='POWER'))
+            command=self.__get_command_wrap('press_key', key_name='POWER'))
         self._root.nametowidget('sidebar.notification_button').config(
-            command=self._get_command_wrap(
-                self._controller.open_notification))
+            command=self.__get_command_wrap('open_notification'))
         self._root.nametowidget('sidebar.quicksettings_button').config(
-            command=self._get_command_wrap(
-                self._controller.open_quick_settings))
+            command=self.__get_command_wrap('open_quick_settings'))
         self._root.nametowidget('sidebar.volume_up_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='VOLUME_UP'))
+            command=self.__get_command_wrap('press_key', key_name='VOLUME_UP'))
         self._root.nametowidget('sidebar.volume_down_button').config(
-            command=self._get_command_wrap(
-                self._controller.press_key, key_name='VOLUME_DOWN'))
+            command=self.__get_command_wrap('press_key',
+                                            key_name='VOLUME_DOWN'))
 
         orient_frm = self._root.nametowidget('sidebar.orientation_frame')
         orient_frm.nametowidget('orientation_natural').config(
-            command=self._get_command_wrap(self._controller.set_orientation,
-                                           orientation='natural'))
+            command=self.__get_command_wrap('set_orientation',
+                                            orientation='natural'))
         orient_frm.nametowidget('orientation_left').config(
-            command=self._get_command_wrap(self._controller.set_orientation,
-                                           orientation='left'))
+            command=self.__get_command_wrap('set_orientation',
+                                            orientation='left'))
         orient_frm.nametowidget('orientation_right').config(
-            command=self._get_command_wrap(self._controller.set_orientation,
-                                           orientation='right'))
+            command=self.__get_command_wrap('set_orientation',
+                                            orientation='right'))
         orient_frm.nametowidget('orientation_upsidedown').config(
-            command=self._get_command_wrap(self._controller.set_orientation,
-                                           orientation='upsidedown'))
+            command=self.__get_command_wrap('set_orientation',
+                                            orientation='upsidedown'))
         orient_frm.nametowidget('orientation_unfreeze').config(
-            command=self._get_command_wrap(self._controller.set_orientation,
-                                           orientation='unfreeze'))
+            command=self.__get_command_wrap('set_orientation',
+                                            orientation='unfreeze'))
 
         self._root.nametowidget('sidebar.ins_screenshot_cap').config(
-            command=self._get_command_wrap(
-                self._controller.insert_screenshot_capture))
+            command=self.__get_command_wrap('insert_screenshot_capture'))
         self._root.nametowidget('sidebar.ins_wait_idle').config(
-            command=self._get_command_wrap(
-                self._controller.insert_wait, for_what='idle',
+            command=self.__get_command_wrap(
+                'insert_wait', for_what='idle',
                 timeout=self._wait_idle_timeout))
         self._root.nametowidget('sidebar.ins_wait_update').config(
-            command=self._get_command_wrap(
-                self._controller.insert_wait, for_what='update',
+            command=self.__get_command_wrap(
+                'insert_wait', for_what='update',
                 timeout=self._wait_update_timeout))
 
         canvas = self._root.nametowidget('mainframe.canvas')
@@ -290,7 +283,7 @@ class ScriptGeneratorUI(object):
         from tkinter import NW
 
         with display_wait(self._root):
-            scr = self._controller.get_screenshot()
+            scr = self._controller.execute('get_screenshot')
         if scr is None:
             raise RuntimeError('Failed to acquire screenshot')
         width, height = (int(scr.width * self._scale),
@@ -304,7 +297,7 @@ class ScriptGeneratorUI(object):
         image_id = canvas.create_image(0, 0, anchor=NW, image=screenshot)
         self._screenshot = {'image': screenshot, 'id': image_id,
                             'size': (width, height)}
-        self._controller.update_view_dump()
+        self._controller.execute('update_view_dump')
         return canvas
 
     def _descale(self, coord):
@@ -429,15 +422,29 @@ class ScriptGeneratorUI(object):
             return retval
         return command_wrap
 
+    def __get_command_wrap(self, command_name, **aditional_args):
+        """Returns wrapped controller command"""
+        command_args = dict(aditional_args)
+        if self._mouse_action:
+            command_args['start'] = self._descale(self._mouse_action['start'])
+            command_args['end'] = self._descale(self._mouse_action['current'])
+
+        def command_wrap():
+            """controller command execution"""
+            with display_wait(self._root):
+                retval = self._controller.execute(command_name, command_args)
+            return retval
+        return command_wrap
+
     def _left_1point_action_menu(self, position):
         """Displays 1-point left-click menu"""
         menu = tkinter.Menu(self._root, name='menu')
         menu.add_command(
             label='Click(xy)',
-            command=self._get_command_wrap(self._controller.click_xy))
+            command=self.__get_command_wrap('click_xy'))
         menu.add_command(
             label='Long click(xy)',
-            command=self._get_command_wrap(self._controller.long_click_xy))
+            command=self.__get_command_wrap('long_click_xy'))
         menu.post(*position)
 
     def _left_2point_action_menu(self, position):
@@ -445,20 +452,19 @@ class ScriptGeneratorUI(object):
         menu = tkinter.Menu(self._root, name='menu')
         menu.add_command(
             label='Swipe(xy -> xy)',
-            command=self._get_command_wrap(self._controller.swipe_xy_to_xy))
+            command=self.__get_command_wrap('swipe_xy_to_xy', steps=10))
         menu.add_command(
             label='Drag(xy -> xy)',
-            command=self._get_command_wrap(self._controller.drag_xy_to_xy))
+            command=self.__get_command_wrap('drag_xy_to_xy'))
         menu.add_command(
             label='Drag(object -> xy)',
-            command=self._get_command_wrap(
-                self._controller.drag_object_to_xy))
+            command=self.__get_command_wrap('drag_object_to_xy'))
         menu.add_command(
             label='Fling',
-            command=self._get_command_wrap(self._controller.fling))
+            command=self.__get_command_wrap('fling'))
         menu.add_command(
             label='Scroll',
-            command=self._get_command_wrap(self._controller.scroll))
+            command=self.__get_command_wrap('scroll'))
         menu.post(*position)
 
     def _right_1point_action_menu(self, position):
@@ -466,21 +472,20 @@ class ScriptGeneratorUI(object):
         menu = tkinter.Menu(self._root, name='menu')
         menu.add_command(
             label='Click(object)',
-            command=self._get_command_wrap(self._controller.click_object))
+            command=self.__get_command_wrap('click_object'))
         menu.add_command(
             label='Click(object) and wait',
-            command=self._get_command_wrap(
-                self._controller.click_object, wait=True,
-                timeout=self._wait_update_timeout))
+            command=self.__get_command_wrap(
+                'click_object', wait=self._wait_update_timeout))
         menu.add_command(
             label='Long click(object)',
-            command=self._get_command_wrap(self._controller.long_click_object))
+            command=self.__get_command_wrap('long_click_object'))
         menu.add_command(
             label='Clear text',
-            command=self._get_command_wrap(self._controller.clear_text))
+            command=self.__get_command_wrap('clear_text'))
         menu.add_command(
             label='Enter text',
-            command=lambda: self._text_action(self._controller.enter_text))
+            command=lambda: self._text_action('enter_text'))
         menu.add_command(label='Pinch in', command=lambda: self._pinch('In'))
         menu.add_command(label='Pinch out', command=lambda: self._pinch('Out'))
         menu.add_separator()
@@ -488,13 +493,13 @@ class ScriptGeneratorUI(object):
             label='Display info', command=self._display_info)
         menu.add_command(
             label='Insert wait-exists',
-            command=self._get_command_wrap(
-                self._controller.insert_wait_object,
+            command=self.__get_command_wrap(
+                'insert_wait_object',
                 for_what='exists', timeout=self._wait_exists_timeout))
         menu.add_command(
             label='Insert wait-gone',
-            command=self._get_command_wrap(
-                self._controller.insert_wait_object,
+            command=self.__get_command_wrap(
+                'insert_wait_object',
                 for_what='gone', timeout=self._wait_gone_timeout))
         menu.post(*position)
 
@@ -503,24 +508,22 @@ class ScriptGeneratorUI(object):
         menu = tkinter.Menu(self._root, name='menu')
         menu.add_command(
             label='Swipe(object + direction)',
-            command=self._get_command_wrap(
-                self._controller.swipe_object_with_direction))
+            command=self.__get_command_wrap('swipe_object_with_direction'))
         menu.add_command(
             label='Drag(object -> object)',
-            command=self._get_command_wrap(
-                self._controller.drag_object_to_object))
+            command=self.__get_command_wrap('drag_object_to_object'))
         menu.add_command(
             label='Fling to end',
-            command=self._get_command_wrap(self._controller.fling_to_end))
+            command=self.__get_command_wrap('fling_to_end'))
         menu.add_command(
             label='Scroll to end',
-            command=self._get_command_wrap(self._controller.scroll_to_end))
+            command=self.__get_command_wrap('scroll_to_end'))
         menu.add_command(
             label='Scroll to text',
-            command=lambda: self._text_action(self._controller.scroll_to_text))
+            command=lambda: self._text_action('scroll_to'))
         menu.post(*position)
 
-    def _text_action(self, command_func):
+    def _text_action(self, command_name):
         """Callback for Enter text event"""
         from tkinter import NW
 
@@ -536,7 +539,7 @@ class ScriptGeneratorUI(object):
             text = entry.get()
             top.destroy()
             self._root.after(
-                0, self._get_command_wrap(command_func, text=text))
+                0, self.__get_command_wrap(command_name, text=text))
 
         # Place a OK button on the dialog
         ok_button = ttk.Button(top, text='OK', command=on_ok, name='ok_button')
@@ -567,8 +570,8 @@ class ScriptGeneratorUI(object):
             percent = int(slider.get() * 100)
             steps = int(stepsStr.get())
             top.destroy()
-            self._root.after(0, self._get_command_wrap(
-                self._controller.pinch,
+            self._root.after(0, self.__get_command_wrap(
+                'pinch',
                 in_or_out=in_or_out,
                 percent=percent,
                 steps=steps))
@@ -584,14 +587,14 @@ class ScriptGeneratorUI(object):
         if not filename:
             return
         with display_wait(self._root):
-            scr = self._controller.get_screenshot()
+            scr = self._controller.execute('get_screenshot')
         scr.save(filename)
 
     def _display_info(self):
         """Callback for Display info"""
         from tkinter import NW
 
-        command_wrap = self._get_command_wrap(self._controller.get_object_info)
+        command_wrap = self.__get_command_wrap('get_object_info')
         result = command_wrap()
 
         # Create a dialog on the canvas
