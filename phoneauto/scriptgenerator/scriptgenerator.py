@@ -14,32 +14,79 @@ import uuid
 from PIL import Image
 
 
+# Command table instatnce to hold commands
 _command_table = {}
 
 
 def command(name):
+    """Command decorator (decorator generator)
+
+    Generates decorator which registers
+    decorated function to the command table.
+
+    Args:
+        name (string):
+            command name which is the key when
+            client code invokes a command
+    Returns:
+        func: decorater function
+    """
     def command_decorator(func):
+        """Decorator function"""
         _command_table[name] = func
         return func
     return command_decorator
 
 
 def _kwarg(name, to_name=None, default=None):
+    """Keywork argument object generator
+
+    Generates keyword argument object which specifies
+    how keyword argument is extracted from
+    the dictionary given from client code ,and how the extracted argument
+    is passed to the command function.
+
+    Args:
+        name (string):
+            argument name, which is used to extract the argument
+            from dictionary which is passed from client.
+            And also, this is used in place of to_name if to_name is not
+            specified or is None.
+        to_name (string):
+            keyword argument name of the command function
+            to which the extracted value is assigned.
+        default (object):
+            default value which is used when name is not found in
+            the dictionary given from the client.
+    Returns:
+        object: keywork argument object
+    """
     to_name = to_name or name
 
     def transform(kwargs):
+        """Keyword argument object implementation"""
         return (to_name, kwargs.get(name, default))
     return transform
 
 
 def _create_command(command_name,
                     device_method_name,
-                    kwarg_list=(),
-                    retval_transform=None):
-    retval_transform = retval_transform or (lambda x: x)
+                    kwarg_list=()):
+    """Creates generic command function and registers it to the command table.
 
+    Args:
+        command_name (string): command's name
+        device_method_name (string):
+            name of the device object's method to call.
+        kwarg_list (tuple):
+            tuple of keyword argument objects which is created using _kwargs
+            function.
+    Returns:
+        command function object.
+    """
     @command(command_name)
     def command_func(device, **command_kwargs):
+        """Generic command impl"""
         method_kwargs = {}
         for kwarg_produce in kwarg_list:
             kwarg = kwarg_produce(command_kwargs)
@@ -48,9 +95,8 @@ def _create_command(command_name,
             else:
                 method_kwargs[kwarg[0]] = kwarg[1]
         device_method = getattr(device, device_method_name)
-        return retval_transform(device_method(**method_kwargs))
+        return device_method(**method_kwargs)
     return command_func
-
 
 _create_command(command_name='update_view_dump',
                 device_method_name='update_view_hierarchy_dump')
@@ -58,7 +104,7 @@ _create_command(command_name='update_view_dump',
 
 @command('get_screenshot')
 def _get_screenshot(device, **_):
-    """Gets device's screenshot"""
+    """get_screenshot command implementation"""
     file_path = os.path.join(tempfile.gettempdir(),
                              'tmp_{0}.png'.format(uuid.uuid4()))
     success = device.get_screenshot_as_file(file_path)
@@ -130,7 +176,6 @@ _create_command(command_name='drag_object_to_object',
                             _kwarg('end'),
                             _kwarg('recorder', to_name='record')))
 
-
 _create_command(command_name='swipe_xy_to_xy',
                 device_method_name='swipe',
                 kwarg_list=(_kwarg('start'),
@@ -140,6 +185,7 @@ _create_command(command_name='swipe_xy_to_xy',
 
 
 def _swipe_direction(kwargs):
+    """Determines swipe direction from start and end point"""
     start, end = kwargs['start'], kwargs['end']
     xdiff, ydiff = end[0] - start[0], end[1] - start[1]
     if abs(xdiff) > abs(ydiff):
@@ -147,7 +193,6 @@ def _swipe_direction(kwargs):
     else:
         direction = 'down' if ydiff >= 0 else 'up'
     return ('direction', direction)
-
 
 _create_command(command_name='swipe_object_with_direction',
                 device_method_name='swipe_object',
@@ -165,6 +210,7 @@ _create_command(command_name='pinch',
 
 
 def _fling_scroll_orientation(kwargs):
+    """Determines fling or scroll orientation"""
     start, end = kwargs['start'], kwargs['end']
     xdiff, ydiff = end[0] - start[0], end[1] - start[1]
     if abs(xdiff) > abs(ydiff):
@@ -174,16 +220,19 @@ def _fling_scroll_orientation(kwargs):
 
 
 def _fling_scroll_orientation_arg(kwargs):
+    """Creates orientation argument of fling/scroll command"""
     return (
         'orientation',
         _fling_scroll_orientation(kwargs)['orientation'])
 
 
 def _fling_scroll_action(to_end):
+    """Creates action argument of fling/scroll command"""
     forward = 'toEnd' if to_end else 'forward'
     backward = 'toBeginning' if to_end else 'backward'
 
     def get_arg(kwargs):
+        """Returns arguments for fling/scroll action"""
         diff = _fling_scroll_orientation(kwargs)['diff']
         return ('action', backward if diff >= 0 else forward)
     return get_arg
@@ -235,10 +284,10 @@ _create_command(command_name='set_orientation',
 
 
 def _png_filename_generate(_):
+    """Creates file argument of record_screenshot_capture"""
     filename = ("datetime.today()"
                 ".strftime('screenshot_%Y%m%d_%H%M%S_%f.png')")
     return ('file', filename)
-
 
 _create_command(command_name='insert_screenshot_capture',
                 device_method_name='record_screenshot_capture',
@@ -275,6 +324,15 @@ class ScriptGenerator(object):
         self.writer = writer
 
     def execute(self, command_name, command_args=None, device_index=0):
+        """Command dispatching
+
+        Args:
+            command_name (string): name of the command
+            command_args (dict):
+                a dictionary which contains arguments to the command
+            device_index (integer):
+                the index of a device object in devices iterable.
+        """
         command_args = command_args or {}
         cmd = _command_table.get(command_name)
         kwargs = dict(command_args)

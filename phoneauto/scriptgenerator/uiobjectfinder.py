@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""UiObject finder
+
+:copyright: (c) 2015 by tksn
+:license: MIT
+"""
 
 from __future__ import unicode_literals
 import math
@@ -6,27 +11,55 @@ import sys
 
 
 class UiObjectNotFound(Exception):
+    """UiObject Not Found Exception"""
 
     def __init__(self, message):
+        """Initialization"""
         super(UiObjectNotFound, self).__init__()
         self.message = message
 
     def __str__(self):
+        """String representation"""
         return 'UiObjectNotFound: ' + self.message
 
 
 class UiObjectFinder(object):
+    """UiObject finder class"""
 
     _FIND_OBJECT_DISTANCE_THRESH = 200
 
     def __init__(self, device):
+        """Initialization
+
+        Args:
+            device (object): uiautomator.Device object
+        """
         self._device = device
         self._hierarchy_dump = None
 
     def set_hierarchy_dump(self, hierarchy_dump):
+        """Sets hierarchy dump string to this object
+
+        Args:
+            hierarchy_dump (string):
+                dump string obtained using uiautomator.Device.dump()
+        """
         self._hierarchy_dump = hierarchy_dump
 
     def find_object_contains(self, coord, ignore_distant, **criteria):
+        """Finds an object which rect contains given coordinates
+
+        Args:
+            coord (tuple): coordinates
+            ignore_distant (boolean):
+                boolean flag which specifies whether it ignores
+                uiobjects which center are too far from coord.
+            criteria (dict):
+                optional key-value pairs which filter search result
+        Returns:
+            dict:
+                dictionary which contains found UiObject and locator to find it
+        """
         objects = self._find_objects_contains(
             coord, ignore_distant, **criteria)
         smallest = self._select_smallest_object(objects)
@@ -47,6 +80,9 @@ class UiObjectFinder(object):
         return retval
 
     def _find_objects_contains(self, coord, ignore_distant, **criteria):
+        """Finds UiObject which rect contains coord"""
+        # pylint: disable=invalid-name
+
         T, L, B, R = 'top', 'left', 'bottom', 'right'
         x, y = coord
 
@@ -67,9 +103,12 @@ class UiObjectFinder(object):
 
     @staticmethod
     def _select_smallest_object(object_enum):
-        def rect_area(r):
+        """Selects the smallest UiObject from sets of UiObject"""
+
+        def rect_area(rect):
             """Returns area of rect r"""
-            return (r['bottom'] - r['top']) * (r['right'] - r['left'])
+            return ((rect['bottom'] - rect['top']) *
+                    (rect['right'] - rect['left']))
 
         min_obj = (sys.maxsize, )
         for i, obj in object_enum:
@@ -81,6 +120,7 @@ class UiObjectFinder(object):
         return {'index': min_obj[1], 'object': min_obj[2]}
 
     def _find_objects(self, **criteria):
+        """Finds objects which conforms to given criteria"""
         if self._hierarchy_dump is None:
             for obj in self._device(**criteria):
                 yield {'instance': obj, 'info': obj.info}
@@ -93,6 +133,7 @@ class UiObjectFinder(object):
         """Determines locator and creates UI element object"""
 
         def unique(**criteria):
+            """checks if given criteria finds single UiObject"""
             objects = list(self._find_objects(**criteria))
             if len(objects) == 1:
                 return True

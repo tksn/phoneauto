@@ -215,7 +215,8 @@ class UiElement(object):
         record(_build_method_call_str(method_name, **kwargs))
 
 
-def create_uielem(find_result):
+def _create_uielem(find_result):
+    """Create UiElement object from find result"""
     uielem = UiElement(find_result['object'], **find_result['locator'])
     index = find_result.get('index')
     if index is not None:
@@ -321,7 +322,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
         """
         try:
-            uielement = create_uielem(
+            uielement = _create_uielem(
                 self._objfinder.find_object_contains(
                     coord, True, className='android.widget.EditText'))
             self.set_text(uielement, keys, record=record)
@@ -337,7 +338,7 @@ class UiautomatorDevice(object):
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 coord, True, className='android.widget.EditText'))
         uielement.clear_text(record=record)
@@ -390,7 +391,7 @@ class UiautomatorDevice(object):
             wait (integer): wait timeout in milliseconds. None means no-wait
             record (function): optional record() for generating a script
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 coord, True, clickable=True, enabled=True))
         uielement.click(wait=wait, record=record)
@@ -412,7 +413,7 @@ class UiautomatorDevice(object):
             coord (tuple): Coordinate (x, y)
             record (function): optional record() for generating a script
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 coord, True, longClickable=True, enabled=True))
         uielement.long_click(record=record)
@@ -441,7 +442,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielementS = create_uielem(
+        uielementS = _create_uielem(
             self._objfinder.find_object_contains(start, True))
         uielementS.drag_to_xy(*end, record=record, **options)
 
@@ -456,9 +457,9 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielementS = create_uielem(
+        uielementS = _create_uielem(
             self._objfinder.find_object_contains(start, True))
-        uielementE = create_uielem(
+        uielementE = _create_uielem(
             self._objfinder.find_object_contains(end, True))
         uielementS.drag_to_object(uielementE, record=record, **options)
 
@@ -485,7 +486,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 start, False, scrollable=True))
         uielement.swipe(direction, record=record, **options)
@@ -505,7 +506,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 coord, True, className='android.view.View', enabled=True))
         kwargs = dict(options)
@@ -526,7 +527,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 start, False, scrollable=True))
         uielement.fling(orientation, action, record=record, **options)
@@ -545,7 +546,7 @@ class UiautomatorDevice(object):
             record (function): optional record() for generating a script
             options (dict): optional key-value pairs.  ex)steps=100
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 start, False, scrollable=True))
         uielement.scroll(orientation, action, record=record, **options)
@@ -568,7 +569,7 @@ class UiautomatorDevice(object):
                 dict which contain key-value pairs to locate the target.
                 ex) {'text': 'Lock screen'}
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 start, False, scrollable=True))
         uielement.scroll(orientation, 'to', record=record, **kwargs)
@@ -585,7 +586,7 @@ class UiautomatorDevice(object):
         Returns:
             dict: UI object's information
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(start, True, **criteria))
         return dict(uielement.info)
 
@@ -641,7 +642,7 @@ class UiautomatorDevice(object):
             timeout (integer): timeout in msec
             record (function): record function for generating a script
         """
-        uielement = create_uielem(
+        uielement = _create_uielem(
             self._objfinder.find_object_contains(
                 start, True, enabled=True))
         options = {}
