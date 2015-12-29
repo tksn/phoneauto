@@ -60,10 +60,10 @@ _ATTRIBUTE_CONV_MAPPING = {
 
 
 class ViewHierarchyDump(object):
-    """Dump of view hierarchy"""
+    """Dump of android UI view hierarchy"""
 
     def __init__(self, device_info, dump):
-        """Initialization
+        """Initialize dump object
 
         Args:
             device_info (dict): dictionary obtained by uiautomator.Device.info
@@ -74,9 +74,9 @@ class ViewHierarchyDump(object):
 
     @staticmethod
     def _get_boolean_attrs(node_attrs, out_attrs):
-        """Attribute format conversion for boolean attributes
+        """Convert attribute format for boolean attributes
 
-        Converts the format of boolean type attributes
+        Convert the format of boolean type attributes
         extracted from a view dump,
         to the same format as uiautomator.DeviceUiObject.info,
         and inserts the converted attribute to the dictionary argument
@@ -87,7 +87,7 @@ class ViewHierarchyDump(object):
                 view attributes extracted from a dump
             out_attrs (dict):
                 view attributes which includes converted
-                boolean conforms to the same format
+                boolean value conforms to the same format
                 as uiautomator.DeviceUiObject.info.
         """
         bool_attrs = ('checked', 'scrollable', 'selected', 'enabled',
@@ -103,9 +103,7 @@ class ViewHierarchyDump(object):
 
     @staticmethod
     def _get_string_attrs(node_attrs, out_attrs):
-        """Attribute format conversion for string attributes
-        Almost same as the _get_boolean_attrs, but for string attributes.
-        """
+        """Convert the attribute format for string attributes"""
         string_attrs = (('contentDescription', 'content-desc'),
                         ('text', 'text'), ('packageName', 'package'),
                         ('className', 'class'),
@@ -115,8 +113,9 @@ class ViewHierarchyDump(object):
 
     @staticmethod
     def _get_bounds_attr(node_attrs, out_attrs):
-        """Attribute format conversion for bounds attribute
-        Has the same objective as the _get_boolean_attrs,
+        """Convert the attribute format for bounds attribute
+
+        Same objective as the _get_boolean_attrs,
         but specifically for bounds attribute.
         """
         bounds_str = node_attrs.get('bounds', '')
@@ -132,8 +131,9 @@ class ViewHierarchyDump(object):
 
     @staticmethod
     def _get_visible_bounds_attr(device_info, bounds):
-        """Attribute format conversion for visibleBounds attribute
-        Has the same objective as the _get_boolean_attrs,
+        """Convert the attribute format for visibleBounds attribute
+
+        Same objective as the _get_boolean_attrs,
         but specifically for visibleBounds attribute.
         """
 
@@ -201,7 +201,7 @@ class ViewHierarchyDump(object):
         return matchers
 
     def find_objects(self, **criteria):
-        """Find objects which meet criteria
+        """Find all objects which meet criteria
 
         Args:
             criteria (dict):

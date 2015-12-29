@@ -13,6 +13,10 @@ import uuid
 
 from PIL import Image
 
+from . import view_hierarchy_dump
+from . import uiobjectfinder
+from . import keycode
+
 
 # Command table instatnce to hold commands
 _command_table = {}
@@ -26,8 +30,8 @@ def command(name):
 
     Args:
         name (string):
-            command name which is the key when
-            client code invokes a command
+            Command name which is the key when
+            client code invokes a command.
     Returns:
         func: decorater function
     """
@@ -39,7 +43,7 @@ def command(name):
 
 
 def _kwarg(name, to_name=None, default=None):
-    """Keywork argument object generator
+    """Keyword argument object generator
 
     Generates keyword argument object which specifies
     how keyword argument is extracted from
@@ -48,143 +52,165 @@ def _kwarg(name, to_name=None, default=None):
 
     Args:
         name (string):
-            argument name, which is used to extract the argument
-            from dictionary which is passed from client.
+            Argument name, which is used to extract the argument
+            from dictionary passed from client.
             And also, this is used in place of to_name if to_name is not
             specified or is None.
         to_name (string):
-            keyword argument name of the command function
+            Keyword argument name of the command function
             to which the extracted value is assigned.
         default (object):
-            default value which is used when name is not found in
+            Default value which is used when name is not found in
             the dictionary given from the client.
     Returns:
-        object: keywork argument object
+        object: keyword argument object
     """
     to_name = to_name or name
 
-    def transform(kwargs):
-        """Keyword argument object implementation"""
-        return (to_name, kwargs.get(name, default))
+    def transform(_, command_kwargs):
+        """Extract keyword arguments from command args"""
+        return [(to_name, command_kwargs.get(name, default))]
+    return transform
+
+
+def _locator(criteria,
+             coord_kwname='start',
+             ignore_distant=True,
+             to_name=None):
+    """Generate locator extractor"""
+    to_name = to_name or 'locator'
+
+    def transform(objs, command_kwargs):
+        """Extract locator from command args"""
+        coord = command_kwargs[coord_kwname]
+        locator = objs.finder.find_object_contains(
+            coord=coord, ignore_distant=ignore_distant, **criteria)
+        return [(to_name, locator)]
     return transform
 
 
 def _create_command(command_name,
-                    device_method_name,
-                    kwarg_list=()):
-    """Creates generic command function and registers it to the command table.
+                    kwarg_list=(),
+                    device_method_name=None,
+                    device_code_method_name=None):
+    """Create generic command function and registers it to the command table.
 
     Args:
-        command_name (string): command's name
-        device_method_name (string):
-            name of the device object's method to call.
+        command_name (string): Command's name
         kwarg_list (tuple):
-            tuple of keyword argument objects which is created using _kwargs
-            function.
+            Tuple of keyword argument objects which is to extract
+            keyword arguments from command arguments and
+            given to device method.
+        device_method_name (string):
+            Name of the device object's method to call.
+            Defaults to command_name if None.
+        device_code_method_name (string):
+            Name of the coder object's method to call.
+            Defaults to device_method_name if None.
     Returns:
         command function object.
     """
+    device_method_name = device_method_name or command_name
+    device_code_method_name = (
+        device_code_method_name or 'get_code_' + device_method_name)
+
     @command(command_name)
-    def command_func(device, **command_kwargs):
-        """Generic command impl"""
+    def command_func(objs, **command_kwargs):
+        """Generic command implementation"""
         method_kwargs = {}
         for kwarg_produce in kwarg_list:
-            kwarg = kwarg_produce(command_kwargs)
-            if isinstance(kwarg, list):
-                method_kwargs.update(dict(kwarg))
-            else:
-                method_kwargs[kwarg[0]] = kwarg[1]
-        device_method = getattr(device, device_method_name)
+            kwarg = kwarg_produce(objs, command_kwargs)
+            method_kwargs.update(dict(kwarg))
+        coder_method = getattr(objs.coder, device_code_method_name)
+        objs.record(coder_method(**method_kwargs))
+        device_method = getattr(objs.device, device_method_name)
         return device_method(**method_kwargs)
     return command_func
 
-_create_command(command_name='update_view_dump',
-                device_method_name='update_view_hierarchy_dump')
+# ====================================================
+# Command definitions
+# ====================================================
+
+
+@command('update_view_dump')
+def _update_view_dump(objs, **_):
+    """Update hierarchy view dump
+    Should be called whenever screen is updated.
+    """
+    dump_str = objs.device.dump()
+    hierarchy_dump = view_hierarchy_dump.ViewHierarchyDump(
+        objs.device.info, dump_str)
+    objs.finder = uiobjectfinder.UiObjectFinder(hierarchy_dump)
 
 
 @command('get_screenshot')
-def _get_screenshot(device, **_):
-    """get_screenshot command implementation"""
+def _get_screenshot(objs, **_):
+    """Get screenshot
+
+    Returns:
+        PIL.Image: Screenshot image if success, otherwise None.
+    """
     file_path = os.path.join(tempfile.gettempdir(),
                              'tmp_{0}.png'.format(uuid.uuid4()))
-    success = device.get_screenshot_as_file(file_path)
+    success = objs.device.get_screenshot_as_file(file_path)
     if not success:
         return None
     return Image.open(file_path)
 
-_create_command(command_name='press_key',
-                device_method_name='press_key',
-                kwarg_list=(_kwarg('key_name'),
-                            _kwarg('meta'),
-                            _kwarg('recorder', to_name='record')))
 
-_create_command(command_name='open_notification',
-                device_method_name='open_notification',
-                kwarg_list=(_kwarg('recorder', to_name='record'),))
+@command('enter_text')
+def _send_keys(objs, **command_args):
+    """Send keys to the screen or a target UI object"""
+    coord = command_args['start']
+    keys = command_args['text']
+    try:
+        # First, try set text to the target UI object
+        loc = objs.finder.find_object_contains(
+            coord, True, className='android.widget.EditText')
+        objs.device.set_text(loc, keys)
+        objs.record(objs.coder.get_code_set_text(loc, keys))
+    except uiobjectfinder.UiObjectNotFound:
+        # If failed to set text to the target UI object,
+        # send each character in text to the screen one by one
+        for k in keycode.chars_to_keys_us(keys):
+            objs.device.press_key(k[0], meta=k[1])
+            objs.record(objs.coder.get_code_press_key(k[0], meta=k[1]))
 
-_create_command(command_name='open_quick_settings',
-                device_method_name='open_quick_settings',
-                kwarg_list=(_kwarg('recorder', to_name='record'),))
+# -------------------------------
+# Commands which require locator
+
+# Locator criteria definition
+_CRITERIA_EDITTEXT = {'className': 'android.widget.EditText'}
+_CRITERIA_CLICKABLE = {'clickable': True, 'enabled': True}
 
 _create_command(command_name='clear_text',
-                device_method_name='clear_text',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('recorder', to_name='record')))
-
-_create_command(command_name='enter_text',
-                device_method_name='find_send_keys',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('text', to_name='keys'),
-                            _kwarg('recorder', to_name='record')))
-
-_create_command(command_name='click_xy',
-                device_method_name='click_xy',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(_locator(_CRITERIA_EDITTEXT),))
 
 _create_command(command_name='click_object',
-                device_method_name='click_object',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('wait'),
-                            _kwarg('recorder', to_name='record')))
-
-_create_command(command_name='long_click_xy',
-                device_method_name='long_click_xy',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),
+                    _kwarg('wait')))
 
 _create_command(command_name='long_click_object',
-                device_method_name='long_click_object',
-                kwarg_list=(_kwarg('start', to_name='coord'),
-                            _kwarg('recorder', to_name='record')))
-
-_create_command(command_name='drag_xy_to_xy',
-                device_method_name='drag_xy_to_xy',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('end'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),))
 
 _create_command(command_name='drag_object_to_xy',
-                device_method_name='drag_object_to_xy',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('end'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),
+                    _kwarg('end', to_name='coord'),
+                    _kwarg('options', default={})))
 
 _create_command(command_name='drag_object_to_object',
-                device_method_name='drag_object_to_object',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('end'),
-                            _kwarg('recorder', to_name='record')))
-
-_create_command(command_name='swipe_xy_to_xy',
-                device_method_name='swipe',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('end'),
-                            _kwarg('recorder', to_name='record'),
-                            _kwarg('steps')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),
+                    _locator(_CRITERIA_CLICKABLE,
+                             coord_kwname='end',
+                             to_name='other_locator'),
+                    _kwarg('options', default={})))
 
 
-def _swipe_direction(kwargs):
+def _swipe_direction(_, kwargs):
     """Determines swipe direction from start and end point"""
     start, end = kwargs['start'], kwargs['end']
     xdiff, ydiff = end[0] - start[0], end[1] - start[1]
@@ -192,149 +218,212 @@ def _swipe_direction(kwargs):
         direction = 'right' if xdiff >= 0 else 'left'
     else:
         direction = 'down' if ydiff >= 0 else 'up'
-    return ('direction', direction)
+    return [('direction', direction)]
 
 _create_command(command_name='swipe_object_with_direction',
                 device_method_name='swipe_object',
-                kwarg_list=(_kwarg('start'),
-                            _swipe_direction,
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _swipe_direction,
+                    _kwarg('options', default={})))
 
 _create_command(command_name='pinch',
-                device_method_name='pinch',
-                kwarg_list=(_kwarg('in_or_out'),
-                            _kwarg('start', to_name='coord'),
-                            _kwarg('percent'),
-                            _kwarg('steps'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),
+                    _kwarg('in_or_out'),
+                    _kwarg('options', default={})))
 
 
-def _fling_scroll_orientation(kwargs):
-    """Determines fling or scroll orientation"""
+def _get_move(kwargs):
+    """Get move direction and amount of an action"""
     start, end = kwargs['start'], kwargs['end']
     xdiff, ydiff = end[0] - start[0], end[1] - start[1]
     if abs(xdiff) > abs(ydiff):
-        return {'orientation': 'horiz', 'diff': xdiff}
+        return ('x', xdiff)
     else:
-        return {'orientation': 'vert', 'diff': ydiff}
+        return ('y', ydiff)
 
 
-def _fling_scroll_orientation_arg(kwargs):
-    """Creates orientation argument of fling/scroll command"""
-    return (
-        'orientation',
-        _fling_scroll_orientation(kwargs)['orientation'])
+def _fling_scroll_orientation(_, kwargs):
+    """Determine fling/scroll orientation"""
+    orientation = 'horiz' if _get_move(kwargs)[0] == 'x' else 'vert'
+    return [('orientation', orientation)]
 
 
 def _fling_scroll_action(to_end):
-    """Creates action argument of fling/scroll command"""
+    """Create action argument of fling/scroll command"""
     forward = 'toEnd' if to_end else 'forward'
     backward = 'toBeginning' if to_end else 'backward'
 
-    def get_arg(kwargs):
+    def get_arg(_, kwargs):
         """Returns arguments for fling/scroll action"""
-        diff = _fling_scroll_orientation(kwargs)['diff']
-        return ('action', backward if diff >= 0 else forward)
+        diff = _get_move(kwargs)[1]
+        return [('action', backward if diff >= 0 else forward)]
     return get_arg
 
-
 _create_command(command_name='fling',
-                device_method_name='fling',
-                kwarg_list=(_kwarg('start'),
-                            _fling_scroll_orientation_arg,
-                            _fling_scroll_action(to_end=False),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _fling_scroll_orientation,
+                    _fling_scroll_action(to_end=False),
+                    _kwarg('options', default={})))
 
 _create_command(command_name='fling_to_end',
                 device_method_name='fling',
-                kwarg_list=(_kwarg('start'),
-                            _fling_scroll_orientation_arg,
-                            _fling_scroll_action(to_end=True),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _fling_scroll_orientation,
+                    _fling_scroll_action(to_end=True),
+                    _kwarg('options', default={})))
 
 _create_command(command_name='scroll',
-                device_method_name='scroll',
-                kwarg_list=(_kwarg('start'),
-                            _fling_scroll_orientation_arg,
-                            _fling_scroll_action(to_end=False),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _fling_scroll_orientation,
+                    _fling_scroll_action(to_end=False),
+                    _kwarg('options', default={})))
 
 _create_command(command_name='scroll_to_end',
                 device_method_name='scroll',
-                kwarg_list=(_kwarg('start'),
-                            _fling_scroll_orientation_arg,
-                            _fling_scroll_action(to_end=True),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _fling_scroll_orientation,
+                    _fling_scroll_action(to_end=True),
+                    _kwarg('options', default={})))
 
 _create_command(command_name='scroll_to',
-                device_method_name='scroll_to',
-                kwarg_list=(lambda kwargs: list(kwargs.items()),
-                            _fling_scroll_orientation_arg,
-                            _kwarg('recorder', to_name='record')))
+                device_method_name='scroll',
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE, ignore_distant=False),
+                    _fling_scroll_orientation,
+                    lambda _, __: [('action', 'to')],
+                    _kwarg('options')))
+
+# ------------------------------------
+# Commands which don't require locator
+
+_create_command(command_name='press_key',
+                kwarg_list=(_kwarg('key_name'),
+                            _kwarg('meta')))
+
+_create_command(command_name='open_notification')
+
+_create_command(command_name='open_quick_settings')
+
+_create_command(command_name='click_xy',
+                kwarg_list=(_kwarg('start', to_name='coord'),))
+
+_create_command(command_name='long_click_xy',
+                kwarg_list=(_kwarg('start', to_name='coord'),))
+
+_create_command(command_name='drag_xy_to_xy',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('options', default={})))
+
+_create_command(command_name='swipe_xy_to_xy',
+                device_method_name='swipe',
+                kwarg_list=(_kwarg('start'),
+                            _kwarg('end'),
+                            _kwarg('options', default={})))
+
+_create_command(command_name='set_orientation',
+                kwarg_list=(_kwarg('orientation'),))
 
 _create_command(command_name='get_object_info',
                 device_method_name='get_info',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('criteria', default={})))
-
-_create_command(command_name='set_orientation',
-                device_method_name='set_orientation',
-                kwarg_list=(_kwarg('orientation'),
-                            _kwarg('recorder', to_name='record')))
+                kwarg_list=(
+                    _locator(_CRITERIA_CLICKABLE),
+                    _kwarg('options', default={})))
 
 
-def _png_filename_generate(_):
-    """Creates file argument of record_screenshot_capture"""
+@command('get_object_info')
+def _get_object_info(objs, **command_args):
+    """Get object's inforamtion such as text, contentDescription and boudns"""
+    coord = command_args['start']
+    options = command_args.get('options', {})
+    locator = objs.finder.find_object_contains(coord, True, **options)
+    return objs.device.get_info(locator)
+
+
+@command('insert_screenshot_capture')
+def _insert_screenshot_capture(objs, **_):
+    """Insert screenshot capture operation into script"""
     filename = ("datetime.today()"
                 ".strftime('screenshot_%Y%m%d_%H%M%S_%f.png')")
-    return ('file', filename)
+    objs.record(objs.coder.get_code_screenshot(filename))
 
-_create_command(command_name='insert_screenshot_capture',
-                device_method_name='record_screenshot_capture',
-                kwarg_list=(_png_filename_generate,
-                            _kwarg('recorder', to_name='record')))
 
-_create_command(command_name='insert_wait',
-                device_method_name='record_wait',
-                kwarg_list=(_kwarg('for_what'),
-                            _kwarg('timeout'),
-                            _kwarg('recorder', to_name='record')))
+@command('insert_wait')
+def _insert_wait(objs, **command_args):
+    """Insert screen state wait operation into script"""
+    objs.record(objs.coder.get_code_wait(
+        command_args['for_what'], command_args['timeout']))
 
-_create_command(command_name='insert_wait_object',
-                device_method_name='record_wait_object',
-                kwarg_list=(_kwarg('start'),
-                            _kwarg('for_what'),
-                            _kwarg('timeout'),
-                            _kwarg('recorder', to_name='record')))
+
+@command('insert_wait_object')
+def _insert_wait_object(objs, **command_args):
+    """Insert object state wait operation into script"""
+    coord = command_args['start']
+    options = command_args.get('options', {})
+    locator = objs.finder.find_object_contains(coord, True, **options)
+    objs.record(objs.coder.get_code_wait_object(
+        locator, command_args['for_what'], command_args['timeout']))
+
+
+# ------------------------------------
+# Generator class definition
 
 
 class ScriptGenerator(object):
-    """Script generation controller class"""
+    """Script generation controller"""
 
-    def __init__(self, devices, writer):
-        """Initialization
+    def __init__(self, conf):
+        """Initialize generator object
 
         Args:
-            devices (iterable):
-                An iterable object which contains device object instances.
-            writer (object):
-                An writer object which is used to generate a automation script
+            conf (dict):
+                Configuration parameter which includes
+                'devices', 'writer', 'coder'.
+                'devices' is an iterable object which contains
+                device object instances.
+                'writer' is an writer object which is used to generate
+                an automation script.
+                'coder' is an object which is used to generate code fragment
+                which performs device manipulation.
         """
-        self.devices = devices
-        self.writer = writer
+        self.devices = conf['devices']
+        self.coder = conf['coder']
+        self.writer = conf['writer']
+        # For test purpose, finder can be given by client.
+        self.finder = conf.get('finder')
 
     def execute(self, command_name, command_args=None, device_index=0):
-        """Command dispatching
+        """Execute command
 
         Args:
-            command_name (string): name of the command
+            command_name (string): Name of the command
             command_args (dict):
-                a dictionary which contains arguments to the command
+                The dictionary which contains arguments to the command
             device_index (integer):
-                the index of a device object in devices iterable.
+                The index of a device object in devices iterable.
         """
         command_args = command_args or {}
-        cmd = _command_table.get(command_name)
-        kwargs = dict(command_args)
-        kwargs['recorder'] = self.writer.get_recorder(device_index)
-        return cmd(self.devices[device_index], **kwargs)
+        command_function = _command_table.get(command_name)
+        command_args_copy = dict(command_args)
+
+        class _Container(object):
+
+            def __init__(c_self):
+                c_self.device = self.devices[device_index]
+                c_self.coder = self.coder
+                c_self.finder = self.finder
+                c_self.record = self.writer.get_recorder(device_index)
+
+        objs = _Container()
+        command_return_value = command_function(objs, **command_args_copy)
+
+        # finder can be updated by commands.
+        self.finder = objs.finder
+
+        return command_return_value

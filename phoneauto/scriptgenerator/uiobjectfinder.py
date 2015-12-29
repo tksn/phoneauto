@@ -11,76 +11,92 @@ import sys
 
 
 class UiObjectNotFound(Exception):
-    """UiObject Not Found Exception"""
+    """Exception raised when the UI object is not found on the screen"""
 
     def __init__(self, message):
-        """Initialization"""
+        """Initialize exception object"""
         super(UiObjectNotFound, self).__init__()
         self.message = message
 
     def __str__(self):
-        """String representation"""
+        """Provide string representation of the exception"""
         return 'UiObjectNotFound: ' + self.message
 
 
+class UiObjectLocator(object):
+    """Locator for locating a UI object on the screen"""
+
+    def __init__(self, filters, index=None):
+        """Initialize locator object
+
+        Args:
+            filters (dict): Key-value pairs which are used as filter conditions
+                to filter out UI Objects.
+            index (int): Index in a list which is yielded by applying
+                filters. It is used to identify the UI object.
+                When filters are enough to filter out UI objects to one single
+                object, index is not used and can be None.
+        """
+        self._filters = filters
+        self._index = index
+
+    @property
+    def filters(self):
+        """Filter conditions which is used to identify a UI object"""
+        return self._filters
+
+    @property
+    def index(self):
+        """Index in filter results, which is used to identify a UI object"""
+        return self._index
+
+
 class UiObjectFinder(object):
-    """UiObject finder class"""
+    """Finder to spot a UI object for provided conditions"""
 
     _FIND_OBJECT_DISTANCE_THRESH = 200
 
-    def __init__(self, device):
-        """Initialization
+    def __init__(self, hierarchy_dump):
+        """Initialize finder object
 
         Args:
-            device (object): uiautomator.Device object
-        """
-        self._device = device
-        self._hierarchy_dump = None
-
-    def set_hierarchy_dump(self, hierarchy_dump):
-        """Sets hierarchy dump string to this object
-
-        Args:
-            hierarchy_dump (string):
-                dump string obtained using uiautomator.Device.dump()
+            hierarchy_dump (object): UI hierarchy dump object
         """
         self._hierarchy_dump = hierarchy_dump
 
     def find_object_contains(self, coord, ignore_distant, **criteria):
-        """Finds an object which rect contains given coordinates
+        """Find an object of which rect contains given coordinates
+        and meeds given criteria.
 
         Args:
-            coord (tuple): coordinates
-            ignore_distant (boolean):
-                boolean flag which specifies whether it ignores
-                uiobjects which center are too far from coord.
+            coord (tuple): Coordinates (x, y)
+            ignore_distant (bool):
+                Boolean flag which specifies whether it ignores
+                UI objects of which center are too far from coord.
             criteria (dict):
-                optional key-value pairs which filter search result
+                Optional key-value pairs which filter search result
         Returns:
-            dict:
-                dictionary which contains found UiObject and locator to find it
+            locator object
+        Raises:
+            UiObjectNotFound: If there is no such object corresponds to
+                given coordinates and criteria.
         """
-        objects = self._find_objects_contains(
+        # Find all objects which contain (x, y)
+        objects_iter = self._find_objects_contains(
             coord, ignore_distant, **criteria)
-        smallest = self._select_smallest_object(objects)
+        # Pick an object which has smallest area
+        smallest = self._select_smallest_object(objects_iter)
         if smallest is None:
             raise UiObjectNotFound('({0}, {1})'.format(*coord))
-
-        index = None
-        locator = self._determine_locator(smallest['object']['info'])
-        if locator is None:
-            locator = criteria
-            index = smallest['index']
-        inst = smallest['object'].get('instance')
-        if inst is None:
-            inst = self._device(**locator)[0 if index is None else index]
-        retval = {'object': inst, 'locator': locator}
-        if index is not None:
-            retval.update({'index': index})
-        return retval
+        # Try finding filters which can uniquely identify an object
+        locator = self._determine_locator(smallest['object'])
+        # If failed, Use index in addition to filters
+        locator = locator or UiObjectLocator(
+            filters=criteria, index=smallest['index'])
+        return locator
 
     def _find_objects_contains(self, coord, ignore_distant, **criteria):
-        """Finds UiObject which rect contains coord"""
+        """Find UI object of which rect contains coord"""
         # pylint: disable=invalid-name
 
         T, L, B, R = 'top', 'left', 'bottom', 'right'
@@ -96,66 +112,54 @@ class UiObjectFinder(object):
                 return distance < self._FIND_OBJECT_DISTANCE_THRESH
             return True
 
-        objects = self._find_objects(**criteria)
+        objects = self._hierarchy_dump.find_objects(**criteria)
         for i, obj in enumerate(objects):
-            if xy_in_rect(obj['info']['visibleBounds']):
+            if xy_in_rect(obj['visibleBounds']):
                 yield (i, obj)
 
     @staticmethod
     def _select_smallest_object(object_enum):
-        """Selects the smallest UiObject from sets of UiObject"""
+        """Select the smallest UI object from a set of UI objects"""
 
         def rect_area(rect):
-            """Returns area of rect r"""
+            """Returns area of rect"""
             return ((rect['bottom'] - rect['top']) *
                     (rect['right'] - rect['left']))
 
-        min_obj = (sys.maxsize, )
+        min_obj = sentinel = (sys.maxsize, )
         for i, obj in object_enum:
-            area = rect_area(obj['info']['visibleBounds'])
+            area = rect_area(obj['visibleBounds'])
             if area < min_obj[0]:
                 min_obj = (area, i, obj)
-        if len(min_obj) == 1:
+        if min_obj is sentinel:
             return None
         return {'index': min_obj[1], 'object': min_obj[2]}
 
-    def _find_objects(self, **criteria):
-        """Finds objects which conforms to given criteria"""
-        if self._hierarchy_dump is None:
-            for obj in self._device(**criteria):
-                yield {'instance': obj, 'info': obj.info}
-        else:
-            infos = self._hierarchy_dump.find_objects(**criteria)
-            for info in infos:
-                yield {'info': info}
-
     def _determine_locator(self, info):
-        """Determines locator and creates UI element object"""
+        """Determine locator which identifies one single UI object"""
 
         def unique(**criteria):
-            """checks if given criteria finds single UiObject"""
-            objects = list(self._find_objects(**criteria))
-            if len(objects) == 1:
-                return True
-            return False
+            """Check if given criteria finds single UI object"""
+            objects = list(self._hierarchy_dump.find_objects(**criteria))
+            return len(objects) == 1
 
         # uses resource_id if it's available and unique
         resource_id = info['resourceName']
         if resource_id and unique(resourceId=resource_id):
-            return {'resourceId': resource_id}
+            return UiObjectLocator(filters={'resourceId': resource_id})
 
         # uses content-desc if it's available
         content_desc = info['contentDescription']
         if content_desc and unique(description=content_desc):
-            return {'description': content_desc}
+            return UiObjectLocator(filters={'description': content_desc})
 
         # uses text if it's available
         if info['text'] and unique(text=info['text']):
-            return {'text': info['text']}
+            return UiObjectLocator(filters={'text': info['text']})
 
         # uses text if it's available
         class_name = info['className']
         if class_name and unique(className=class_name):
-            return {'className': class_name}
+            return UiObjectLocator(filters={'className': class_name})
 
         return None

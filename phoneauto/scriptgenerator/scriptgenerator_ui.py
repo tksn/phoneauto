@@ -178,7 +178,7 @@ class ScriptGeneratorUI(object):
 
         def orient_button(name, text):
             """Orientation button"""
-            button(frm, {'name': name, 'text': text, 'width': 1},
+            button(frm, {'name': name, 'text': text, 'width': 2},
                    {'side': tkinter.LEFT})
         orient_button('orientation_natural', 'N')
         orient_button('orientation_left', 'L')
@@ -408,20 +408,6 @@ class ScriptGeneratorUI(object):
 
         self._draw_mouse_action(erase=True)
 
-    def _get_command_wrap(self, command, **aditional_args):
-        """Returns wrapped controller command"""
-        command_args = dict(aditional_args)
-        if self._mouse_action:
-            command_args['start'] = self._descale(self._mouse_action['start'])
-            command_args['end'] = self._descale(self._mouse_action['current'])
-
-        def command_wrap():
-            """controller command execution"""
-            with display_wait(self._root):
-                retval = command(command_args)
-            return retval
-        return command_wrap
-
     def __get_command_wrap(self, command_name, **aditional_args):
         """Returns wrapped controller command"""
         command_args = dict(aditional_args)
@@ -452,7 +438,8 @@ class ScriptGeneratorUI(object):
         menu = tkinter.Menu(self._root, name='menu')
         menu.add_command(
             label='Swipe(xy -> xy)',
-            command=self.__get_command_wrap('swipe_xy_to_xy', steps=10))
+            command=self.__get_command_wrap('swipe_xy_to_xy',
+                                            options={'steps': 10}))
         menu.add_command(
             label='Drag(xy -> xy)',
             command=self.__get_command_wrap('drag_xy_to_xy'))
@@ -485,7 +472,8 @@ class ScriptGeneratorUI(object):
             command=self.__get_command_wrap('clear_text'))
         menu.add_command(
             label='Enter text',
-            command=lambda: self._text_action('enter_text'))
+            command=lambda: self._text_action(
+                'enter_text', lambda text: {'text': text}))
         menu.add_command(label='Pinch in', command=lambda: self._pinch('In'))
         menu.add_command(label='Pinch out', command=lambda: self._pinch('Out'))
         menu.add_separator()
@@ -520,10 +508,11 @@ class ScriptGeneratorUI(object):
             command=self.__get_command_wrap('scroll_to_end'))
         menu.add_command(
             label='Scroll to text',
-            command=lambda: self._text_action('scroll_to'))
+            command=lambda: self._text_action(
+                'scroll_to', lambda text: {'options': {'text': text}}))
         menu.post(*position)
 
-    def _text_action(self, command_name):
+    def _text_action(self, command_name, command_kwargs_gen):
         """Callback for Enter text event"""
         from tkinter import NW
 
@@ -539,7 +528,8 @@ class ScriptGeneratorUI(object):
             text = entry.get()
             top.destroy()
             self._root.after(
-                0, self.__get_command_wrap(command_name, text=text))
+                0, self.__get_command_wrap(command_name,
+                                           **command_kwargs_gen(text)))
 
         # Place a OK button on the dialog
         ok_button = ttk.Button(top, text='OK', command=on_ok, name='ok_button')
@@ -573,8 +563,10 @@ class ScriptGeneratorUI(object):
             self._root.after(0, self.__get_command_wrap(
                 'pinch',
                 in_or_out=in_or_out,
-                percent=percent,
-                steps=steps))
+                options={
+                    'percent': percent,
+                    'steps': steps
+                }))
 
         # Place a OK button on the dialog
         ok_button = ttk.Button(top, text='OK', command=on_ok, name='ok_button')

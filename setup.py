@@ -25,7 +25,7 @@ Not yet
 setup(
     name='phoneauto',
 
-    version='0.1.0.dev0',
+    version='0.1.0.dev1',
 
     description='Phone automation toools',
     long_description=LONG_DESCRIPTION,

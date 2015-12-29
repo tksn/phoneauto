@@ -80,7 +80,7 @@ _SPECIAL_DICT = dict(_SPECIAL)
 
 
 def get_keycode(key):
-    """Retuns keycode from key name
+    """Returns key code from key name
 
     Args:
         key (text): key name

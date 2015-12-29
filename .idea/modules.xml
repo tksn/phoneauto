@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/phoneauto.iml" filepath="$PROJECT_DIR$/.idea/phoneauto.iml" />
       <module fileurl="file://$USER_HOME$/Development/Phone/PhoneTest2/phoneauto/.idea/phoneauto.iml" filepath="$USER_HOME$/Development/Phone/PhoneTest2/phoneauto/.idea/phoneauto.iml" />
     </modules>
   </component>

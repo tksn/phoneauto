@@ -2,10 +2,7 @@
 
 from __future__ import unicode_literals
 
-from mock import Mock, call
 import pytest
-from phoneauto.scriptgenerator import uiautomator_device
-from tests.uiautomator_mock import uia_element_info, bounds
 from phoneauto.helpers.uiautomator_device_wrapper import DeviceWrapper
 
 

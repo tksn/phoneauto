@@ -2,10 +2,9 @@
 
 from __future__ import unicode_literals
 
-from mock import Mock, call
+from mock import call
 import pytest
-from phoneauto.scriptgenerator import uiautomator_device
-from tests.uiautomator_mock import uia_element_info, bounds
+from tests.uiautomator_mock import uia_element_info
 from phoneauto.helpers.uiautomator_notfound_handlers import *
 
 

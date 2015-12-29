@@ -13,10 +13,11 @@ import io
 import os
 import sys
 
-from phoneauto.scriptgenerator.pytest_script_writer import PytestScriptWriter
-from phoneauto.scriptgenerator.scriptgenerator import ScriptGenerator
-from phoneauto.scriptgenerator.scriptgenerator_ui import ScriptGeneratorUI
-from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
+from phoneauto.scriptgenerator import pytest_script_writer
+from phoneauto.scriptgenerator import scriptgenerator_ui
+from phoneauto.scriptgenerator import scriptgenerator
+from phoneauto.scriptgenerator import uiautomator_device
+from phoneauto.scriptgenerator import uiautomator_coder
 
 
 def scriptgenerator_main(options):
@@ -43,17 +44,24 @@ def scriptgenerator_main(options):
     else:
         outfile = codecs.getwriter('utf-8')(result_out)
 
-    ui = ScriptGeneratorUI(scale=options.get('scale', 0.5),
-                           platform_sys=options.get('platform', None))
+    ui = scriptgenerator_ui.ScriptGeneratorUI(
+        scale=options.get('scale', 0.5),
+        platform_sys=options.get('platform', None))
     timeouts = options.get('timeouts')
     if timeouts:
         ui.set_timeouts(timeouts)
 
-    device = UiautomatorDevice()
-    writer = PytestScriptWriter(outfile, [device])
+    device = uiautomator_device.UiautomatorDevice()
+    coder = uiautomator_coder.UiautomatorCoder()
+    writer = pytest_script_writer.PytestScriptWriter(outfile, [coder])
 
     writer.start()
-    controller = ScriptGenerator([device], writer)
+    conf = {
+        'devices': [device],
+        'coder': uiautomator_coder.UiautomatorCoder(),
+        'writer': writer
+    }
+    controller = scriptgenerator.ScriptGenerator(conf)
     ui.run(controller)
     writer.finish()
 

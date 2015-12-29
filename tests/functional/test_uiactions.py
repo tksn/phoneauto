@@ -6,10 +6,9 @@ import io
 from mock import MagicMock, call, patch
 
 from phoneauto.scriptgenerator import scriptgenerator_main
-from phoneauto.scriptgenerator.uiautomator_device import UiautomatorDevice
 from phoneauto.scriptgenerator.uiobjectfinder import UiObjectFinder
 from phoneauto.scriptgenerator.keycode import get_keycode
-from tests.uiautomator_mock import uia_element_info, bounds
+from tests.uiautomator_mock import uia_element_info
 
 
 def last_line(result_out):
