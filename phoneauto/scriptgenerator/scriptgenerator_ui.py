@@ -10,17 +10,24 @@
 
 from __future__ import unicode_literals, print_function
 import contextlib
+import logging
 import math
 import platform
 import tkinter
+import tkinter.font
 from tkinter import ttk
-from PIL import Image, ImageTk, ImageDraw
+import time
+from PIL import Image, ImageTk, ImageDraw, ImageFont
+
+from phoneauto.scriptgenerator.exception import (
+    UiInconsitencyError, UiObjectNotFound)
+from phoneauto.scriptgenerator.screenrecord import Screenrecord
 
 
 def get_filedialog():  # pragma: no cover
     """Returns filedialog module object
 
-    Returns appropriate filedialong module depending on sys.version.
+    Returns appropriate filedialog module depending on sys.version.
     The reason doing this is because python.future's tkinter.filedialog
     is alias to FileDialog, not to tkFileDialog.
     """
@@ -45,10 +52,16 @@ def display_wait(root_window):
 class ScriptGeneratorUI(object):
     """Automation script generator UI"""
 
+    _SCR_REFRESH_INTERVAL = 100
+    _HVIEW_REFRESH_INTERVAL = 3
+    _HVIEW_REFRESH_INTERVAL_AFTER_SCR_REFRESH = 1
     _MOUSE_MOVE_THRESH = 20
     _CLICKCIRCLE_RADIUS = 5
 
-    def __init__(self, scale=0.3, platform_sys=None):
+    def __init__(self,
+                 screen_size=(480, 800),
+                 platform_sys=None,
+                 timeouts=None):
         """Initialization
 
         Args:
@@ -56,31 +69,28 @@ class ScriptGeneratorUI(object):
                 magnification scale which is used when screenshot
                 is displayed in this UI
         """
+        self.logger = logging.getLogger(__name__)
+        self.logger.info('initialization start')
         self._controller = None
-        self._scale = scale
+        self._scale = None
         self._screenshot = None
         self._mouse_action = None
+        self.hierarchy_view_timestamp = 0
 
-        self._wait_idle_timeout = 5000
-        self._wait_update_timeout = 1000
-        self._wait_exists_timeout = 5000
-        self._wait_gone_timeout = 5000
+        timeouts = timeouts or {}
+        self._wait_timeouts = {}
+        default_timeouts = {
+            'idle': 5000, 'update': 1000, 'exists': 5000, 'gone': 5000}
+        for name, default_value in default_timeouts.items():
+            self._wait_timeouts[name] = timeouts.get(name, default_value)
 
         self._hold_timer_id = None
         self._root = None
         self._platform = platform_sys or platform.system()
-        self._create_components()
-
-    def set_timeouts(self, timeouts):
-        """Sets timeout values"""
-        self._wait_idle_timeout = timeouts.get(
-            'idle', self._wait_idle_timeout)
-        self._wait_update_timeout = timeouts.get(
-            'update', self._wait_update_timeout)
-        self._wait_exists_timeout = timeouts.get(
-            'exists', self._wait_exists_timeout)
-        self._wait_gone_timeout = timeouts.get(
-            'gone', self._wait_gone_timeout)
+        self._screenrecord = Screenrecord(
+            width=screen_size[0], height=screen_size[1])
+        self._build_ui()
+        self.logger.info('initialization end')
 
     def run(self, controller):
         """Launches UI and enter the event loop
@@ -90,10 +100,15 @@ class ScriptGeneratorUI(object):
                 scriptgenerator object
         """
         self._controller = controller
-        self._initialize()
-        self._root.mainloop()
+        self._enable_ui()
+        try:
+            self._root.mainloop()
+        finally:
+            if self._screenrecord:
+                self._screenrecord.join()
+                self._screenrecord = None
 
-    def _create_components(self):
+    def _build_ui(self):
         """Creates UI components and builds up application UI"""
         from tkinter import N, W, E, S
 
@@ -103,7 +118,7 @@ class ScriptGeneratorUI(object):
         mainframe = ttk.Frame(self._root, name='mainframe')
         mainframe.grid(row=0, column=0, sticky=(N, W, E, S))
 
-        canvas = self._display_placeholder_screen()
+        canvas = self._create_canvas(mainframe)
         canvas.grid(row=1, column=0, columnspan=3, sticky=(N, W, E, S))
 
         back_button = ttk.Button(
@@ -118,29 +133,38 @@ class ScriptGeneratorUI(object):
 
         sidebar = ttk.Frame(self._root, name='sidebar')
         sidebar.grid(row=0, column=1, sticky=(N, W, E, S))
-        self._construct_sidebar(sidebar)
+        self._build_sidebar(sidebar)
         self._root.update()
 
-    def _display_placeholder_screen(self):
+    def _create_canvas(self, parent):
         """Displays placeholder (Initializing message) screen
         before actual screenshot is aquired
         """
         from tkinter import NW
-        width, height = 400, 400
-        placeholder = Image.new(mode='RGB', size=(width, height))
-        draw = ImageDraw.Draw(placeholder)
-        draw.text((10, 10), 'Initializing...')
-        placeholder_tk = ImageTk.PhotoImage(placeholder)
-        mainframe = self._root.nametowidget('mainframe')
-        canvas = tkinter.Canvas(mainframe,
-                                width=width, height=height, name='canvas')
+
+        screencap = self._screenrecord.capture_oneshot()
+
+        placeholder_tk = ImageTk.PhotoImage(screencap)
+        canvas = tkinter.Canvas(parent,
+                                width=screencap.width, height=screencap.height,
+                                name='canvas')
         image_id = canvas.create_image(0, 0, anchor=NW, image=placeholder_tk)
+
+        text = 'Initializing'
+        text_x, text_y = screencap.width / 2, screencap.height / 2
+        text_id = canvas.create_text(
+            text_x, text_y, text=text, fill='white',
+            font=('Courier', 32), tag='init_text')
+        bgrect_id = canvas.create_rectangle(
+            canvas.bbox(text_id), fill='black', tag='init_text_bg')
+        canvas.tag_lower(bgrect_id, text_id)
+
         self._screenshot = {'image': placeholder_tk, 'id': image_id,
-                            'size': (width, height)}
+                            'size': screencap.size}
         return canvas
 
     @staticmethod
-    def _construct_sidebar(sidebar):
+    def _build_sidebar(sidebar):
         """Constructs side panel"""
 
         def button(master, widget_options, pack_options=None):
@@ -198,66 +222,80 @@ class ScriptGeneratorUI(object):
                {'name': 'ins_wait_update', 'text': 'wait.update'})
 
         separator(sidebar, {'orient': tkinter.HORIZONTAL})
-        label(sidebar, {'text': 'Keys\n  r: Refresh'})
 
-    def _initialize(self):
+        text = tkinter.Text(sidebar, width=30, name='infotext')
+        text.pack(padx=3, pady=2)
+
+    def _enable_ui(self):
+        """2nd phase initialization - activate UI"""
+        self._bind_commands_to_widgets()
+        self._acquire_hierarchy_view()
+        self._set_screen_scale()
+        self._screenrecord.start()
+        self._kick_video_update()
+        self._refresh_screen()
+        canvas = self._root.nametowidget('mainframe.canvas')
+        canvas.delete('init_text')
+        canvas.delete('init_text_bg')
+
+    def _bind_commands_to_widgets(self):
         """Initialization after controller became available"""
-        self._root.nametowidget('mainframe.back_button').config(
-            command=self.__get_command_wrap('press_key', key_name='BACK'))
-        self._root.nametowidget('mainframe.home_button').config(
-            command=self.__get_command_wrap('press_key', key_name='HOME'))
-        self._root.nametowidget('mainframe.recent_button').config(
-            command=self.__get_command_wrap('press_key',
-                                            key_name='APP_SWITCH'))
 
-        self._root.nametowidget('sidebar.refresh_button').config(
-            command=self._acquire_screen)
-        self._root.nametowidget('sidebar.screenshot_button').config(
-            command=self._take_screenshot)
-        self._root.nametowidget('sidebar.power_button').config(
-            command=self.__get_command_wrap('press_key', key_name='POWER'))
-        self._root.nametowidget('sidebar.notification_button').config(
-            command=self.__get_command_wrap('open_notification'))
-        self._root.nametowidget('sidebar.quicksettings_button').config(
-            command=self.__get_command_wrap('open_quick_settings'))
-        self._root.nametowidget('sidebar.volume_up_button').config(
-            command=self.__get_command_wrap('press_key', key_name='VOLUME_UP'))
-        self._root.nametowidget('sidebar.volume_down_button').config(
-            command=self.__get_command_wrap('press_key',
-                                            key_name='VOLUME_DOWN'))
+        def bind_custom_command(widget_name, command):
+            self._root.nametowidget(widget_name).config(command=command)
 
-        orient_frm = self._root.nametowidget('sidebar.orientation_frame')
-        orient_frm.nametowidget('orientation_natural').config(
-            command=self.__get_command_wrap('set_orientation',
-                                            orientation='natural'))
-        orient_frm.nametowidget('orientation_left').config(
-            command=self.__get_command_wrap('set_orientation',
-                                            orientation='left'))
-        orient_frm.nametowidget('orientation_right').config(
-            command=self.__get_command_wrap('set_orientation',
-                                            orientation='right'))
-        orient_frm.nametowidget('orientation_upsidedown').config(
-            command=self.__get_command_wrap('set_orientation',
-                                            orientation='upsidedown'))
-        orient_frm.nametowidget('orientation_unfreeze').config(
-            command=self.__get_command_wrap('set_orientation',
-                                            orientation='unfreeze'))
+        def bind_command(widget_name, command_name, **command_kwargs):
+            bind_custom_command(widget_name,
+                                self.__get_command_wrap(command_name,
+                                                        **command_kwargs))
 
-        self._root.nametowidget('sidebar.ins_screenshot_cap').config(
-            command=self.__get_command_wrap('insert_screenshot_capture'))
-        self._root.nametowidget('sidebar.ins_wait_idle').config(
-            command=self.__get_command_wrap(
-                'insert_wait', for_what='idle',
-                timeout=self._wait_idle_timeout))
-        self._root.nametowidget('sidebar.ins_wait_update').config(
-            command=self.__get_command_wrap(
-                'insert_wait', for_what='update',
-                timeout=self._wait_update_timeout))
+        bind_command('mainframe.back_button', 'press_key',
+                     key_name='BACK')
+        bind_command('mainframe.home_button', 'press_key',
+                     key_name='HOME')
+        bind_command('mainframe.recent_button', 'press_key',
+                     key_name='APP_SWITCH')
+        bind_custom_command('sidebar.refresh_button',
+                            lambda _: self._acquire_hierarchy_view())
+        bind_custom_command('sidebar.screenshot_button',
+                            self._take_screenshot)
+        bind_command('sidebar.power_button', 'press_key',
+                     key_name='POWER')
+        bind_command('sidebar.notification_button',
+                     'open_notification')
+        bind_command('sidebar.quicksettings_button',
+                     'open_quick_settings')
+        bind_command('sidebar.volume_up_button', 'press_key',
+                     key_name='VOLUME_UP')
+        bind_command('sidebar.volume_down_button', 'press_key',
+                     key_name='VOLUME_DOWN')
+
+        bind_command('sidebar.orientation_frame.orientation_natural',
+                     'set_orientation', orientation='natural')
+        bind_command('sidebar.orientation_frame.orientation_left',
+                     'set_orientation', orientation='left')
+        bind_command('sidebar.orientation_frame.orientation_right',
+                     'set_orientation', orientation='right')
+        bind_command(
+            'sidebar.orientation_frame.orientation_upsidedown',
+            'set_orientation', orientation='upsidedown')
+        bind_command('sidebar.orientation_frame.orientation_unfreeze',
+                     'set_orientation', orientation='unfreeze')
+
+        bind_command('sidebar.ins_screenshot_cap',
+                     'insert_screenshot_capture')
+        bind_command('sidebar.ins_wait_idle', 'insert_wait',
+                     for_what='idle', timeout=self._wait_timeouts['idle'])
+        bind_command('sidebar.ins_wait_update', 'insert_wait',
+                     for_what='update',
+                     timeout=self._wait_timeouts['update'])
 
         canvas = self._root.nametowidget('mainframe.canvas')
+        canvas.bind('<Motion>', self._on_mouse_motion)
+        canvas.bind('<Leave>', self._on_mouse_leave)
         canvas.bind('<Button-1>', self._on_mouse_left_down)
         canvas.bind('<ButtonRelease-1>', self._on_mouse_left_up)
-        canvas.bind('<B1-Motion>', self._on_mouse_move)
+        canvas.bind('<B1-Motion>', self._on_mouse_b1motion)
 
         rbutton_events = (
             ('<Button-2>', '<ButtonRelease-2>', '<B2-Motion>')
@@ -265,40 +303,54 @@ class ScriptGeneratorUI(object):
             else ('<Button-3>', '<ButtonRelease-3>', '<B3-Motion>'))
         canvas.bind(rbutton_events[0], self._on_mouse_right_down)
         canvas.bind(rbutton_events[1], self._on_mouse_right_up)
-        canvas.bind(rbutton_events[2], self._on_mouse_move)
+        canvas.bind(rbutton_events[2], self._on_mouse_b1motion)
 
-        self._root.bind('r', self._acquire_screen)
-        self._acquire_screen()
+    def _kick_video_update(self):
+        """Workaround: Some movements on the device's screen are needed
+        in order to pull up first few frames from the device..
+        """
+        self._controller.execute('video_init')
 
-    def _acquire_screen(self, _=None):
+    def _refresh_screen(self):
+        from tkinter import NW
+        frame = None
+        while not self._screenrecord.queue.empty():
+            frame = self._screenrecord.queue.get_nowait()
+
+        hierarchy_view_age = time.time() - self.hierarchy_view_timestamp
+        if frame:
+            disp_frame = ImageTk.PhotoImage(frame)
+            canvas = self._root.nametowidget('mainframe.canvas')
+            canvas.delete(self._screenshot['id'])
+            canvas.config(width=self._screenrecord.width,
+                          height=self._screenrecord.height)
+            all_other_items = canvas.find_all()
+            image_id = canvas.create_image(0, 0, anchor=NW, image=disp_frame)
+            if all_other_items:
+                canvas.tag_lower(image_id, all_other_items[0])
+            self._screenshot = {'image': disp_frame, 'id': image_id}
+            if (hierarchy_view_age >
+                    self._HVIEW_REFRESH_INTERVAL_AFTER_SCR_REFRESH):
+                self._acquire_hierarchy_view()
+        elif hierarchy_view_age > self._HVIEW_REFRESH_INTERVAL:
+            self._acquire_hierarchy_view()
+        self._root.after(self._SCR_REFRESH_INTERVAL, self._refresh_screen)
+
+    def _acquire_hierarchy_view(self):
         """Acquires screenshot from the device, and place it on the UI's canvas
 
-        Returns:        self._cancel_hold_timer()
-        self._mouse_action['current'] = event.x, event.y
-        self._root.update()
-
-
+        Returns:
             Tkinter.Canvas: canvas object
         """
-        from tkinter import NW
-
-        with display_wait(self._root):
-            scr = self._controller.execute('get_screenshot')
-        if scr is None:
-            raise RuntimeError('Failed to acquire screenshot')
-        width, height = (int(scr.width * self._scale),
-                         int(scr.height * self._scale))
-        screenshot = ImageTk.PhotoImage(
-            scr.resize((width, height), Image.ANTIALIAS))
-
-        canvas = self._root.nametowidget('mainframe.canvas')
-        canvas.delete(self._screenshot['id'])
-        canvas.config(width=width, height=height)
-        image_id = canvas.create_image(0, 0, anchor=NW, image=screenshot)
-        self._screenshot = {'image': screenshot, 'id': image_id,
-                            'size': (width, height)}
         self._controller.execute('update_view_dump')
-        return canvas
+        self.hierarchy_view_timestamp = time.time()
+
+    def _set_screen_scale(self):
+        """Sets screen scale information"""
+        original_size = self._controller.execute('get_screen_size')
+        scaled_size = self._screenshot['size']
+        self._scale = (scaled_size[0] / original_size[0],
+                       scaled_size[1] / original_size[1])
 
     def _descale(self, coord):
         """Converts a coordinate from canvas-coordinats to
@@ -307,9 +359,47 @@ class ScriptGeneratorUI(object):
         Args:
             coord (tuple): coordinats (x, y)
         """
-        return int(coord[0] / self._scale), int(coord[1] / self._scale)
+        return int(coord[0] / self._scale[0]), int(coord[1] / self._scale[1])
 
-    def _on_mouse_move(self, event):
+    def _on_mouse_leave(self, event):
+        """Callback for mouse leave event
+        Args:
+            event (object): event information which is passed by Tk framework
+        """
+        canvas = self._root.nametowidget('mainframe.canvas')
+        canvas.delete('object_rect')
+
+    def _on_mouse_motion(self, event):
+        """Callback for mouse motion event
+        Args:
+            event (object): event information which is passed by Tk framework
+        """
+        canvas = self._root.nametowidget('mainframe.canvas')
+        canvas.delete('object_rect')
+        text = self._root.nametowidget('sidebar.infotext')
+        text.delete(1.0, tkinter.END)
+
+        command_args = {'start': self._descale((event.x, event.y))}
+        obj_info = self._controller.execute(
+            'get_hierarchy_view_object_info', command_args)
+        if obj_info:
+            bounds = obj_info['visibleBounds']
+
+            def scale(coord):
+                """Scale coordinates from actual screen -> view"""
+                return (
+                    int(coord[0] * self._scale[0]),
+                    int(coord[1] * self._scale[1]))
+            xy0 = scale((bounds['left'], bounds['top']))
+            xy1 = scale((bounds['right'], bounds['bottom']))
+            canvas.create_rectangle(
+                xy0[0], xy0[1], xy1[0], xy1[1],
+                outline='red', width=2, tag='object_rect')
+            for k, v in obj_info.items():
+                v = v or '-'
+                text.insert(tkinter.END, '{0}: {1}\n'.format(k, v))
+
+    def _on_mouse_b1motion(self, event):
         """Callback for left-button motion event
         Args:
             event (object): event information which is passed by Tk framework
@@ -417,9 +507,13 @@ class ScriptGeneratorUI(object):
 
         def command_wrap():
             """controller command execution"""
-            with display_wait(self._root):
-                retval = self._controller.execute(command_name, command_args)
-            return retval
+            try:
+                with display_wait(self._root):
+                    retval = self._controller.execute(
+                        command_name, command_args)
+                return retval
+            except (UiObjectNotFound, UiInconsitencyError):
+                self._acquire_hierarchy_view()
         return command_wrap
 
     def _left_1point_action_menu(self, position):
@@ -463,7 +557,7 @@ class ScriptGeneratorUI(object):
         menu.add_command(
             label='Click(object) and wait',
             command=self.__get_command_wrap(
-                'click_object', wait=self._wait_update_timeout))
+                'click_object', wait=self._wait_timeouts['update']))
         menu.add_command(
             label='Long click(object)',
             command=self.__get_command_wrap('long_click_object'))
@@ -478,17 +572,15 @@ class ScriptGeneratorUI(object):
         menu.add_command(label='Pinch out', command=lambda: self._pinch('Out'))
         menu.add_separator()
         menu.add_command(
-            label='Display info', command=self._display_info)
-        menu.add_command(
             label='Insert wait-exists',
             command=self.__get_command_wrap(
                 'insert_wait_object',
-                for_what='exists', timeout=self._wait_exists_timeout))
+                for_what='exists', timeout=self._wait_timeouts['exists']))
         menu.add_command(
             label='Insert wait-gone',
             command=self.__get_command_wrap(
                 'insert_wait_object',
-                for_what='gone', timeout=self._wait_gone_timeout))
+                for_what='gone', timeout=self._wait_timeouts['gone']))
         menu.post(*position)
 
     def _right_2point_action_menu(self, position):
@@ -581,28 +673,3 @@ class ScriptGeneratorUI(object):
         with display_wait(self._root):
             scr = self._controller.execute('get_screenshot')
         scr.save(filename)
-
-    def _display_info(self):
-        """Callback for Display info"""
-        from tkinter import NW
-
-        command_wrap = self.__get_command_wrap('get_object_info')
-        result = command_wrap()
-
-        # Create a dialog on the canvas
-        canvas = self._root.nametowidget('mainframe.canvas')
-        top = tkinter.Toplevel(canvas, name='info')
-
-        result_str = '\n'.join(
-            '{0}: {1}'.format(k, v) for k, v in result.items())
-
-        text = tkinter.Text(top, width=40, height=20, name='infotext')
-        text.insert(tkinter.END, result_str)
-        text.grid(row=0, column=0, sticky=NW)
-
-        # Place a OK button on the dialog
-        ok_button = ttk.Button(top, text='OK',
-                               command=top.destroy,
-                               name='ok_button')
-        ok_button.grid(row=1, column=0, sticky=NW)
-        canvas.wait_window(top)

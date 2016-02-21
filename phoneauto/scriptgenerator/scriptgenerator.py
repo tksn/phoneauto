@@ -9,6 +9,7 @@
 from __future__ import unicode_literals
 import os
 import tempfile
+import time
 import uuid
 
 from PIL import Image
@@ -16,6 +17,7 @@ from PIL import Image
 from . import view_hierarchy_dump
 from . import uiobjectfinder
 from . import keycode
+from phoneauto.scriptgenerator.exception import UiObjectNotFound
 
 
 # Command table instatnce to hold commands
@@ -330,20 +332,31 @@ _create_command(command_name='swipe_xy_to_xy',
 _create_command(command_name='set_orientation',
                 kwarg_list=(_kwarg('orientation'),))
 
-_create_command(command_name='get_object_info',
-                device_method_name='get_info',
-                kwarg_list=(
-                    _locator(_CRITERIA_CLICKABLE),
-                    _kwarg('options', default={})))
+
+@command('video_init')
+def _video_init(objs, **_):
+    for kn in ('APP_SWITCH', 'HOME', 'APP_SWITCH', 'HOME'):
+        objs.device.press_key(kn, meta=None)
+        time.sleep(1)
 
 
-@command('get_object_info')
-def _get_object_info(objs, **command_args):
+@command('get_hierarchy_view_object_info')
+def _get_hierarchy_view_object_info(objs, **command_args):
     """Get object's inforamtion such as text, contentDescription and boudns"""
     coord = command_args['start']
     options = command_args.get('options', {})
-    locator = objs.finder.find_object_contains(coord, True, **options)
-    return objs.device.get_info(locator)
+    try:
+        locator = objs.finder.find_object_contains(coord, True, **options)
+    except UiObjectNotFound:
+        return None
+    return locator.meta
+
+
+@command('get_screen_size')
+def _get_screen_size(objs, **_):
+    """Get screen size"""
+    device_info = objs.device.info
+    return (device_info['displayWidth'], device_info['displayHeight'])
 
 
 @command('insert_screenshot_capture')

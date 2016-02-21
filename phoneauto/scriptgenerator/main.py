@@ -10,6 +10,7 @@ from __future__ import unicode_literals
 import argparse
 import codecs
 import io
+import logging
 import os
 import sys
 
@@ -27,10 +28,6 @@ def scriptgenerator_main(options):
         options['result_out'] (file):
             A file object to which automation script is written.
             Defaults to sys.stdout if result_out is None.
-        options['scale'] (float):
-            Resizing scale which is used when the screenshot aquired from
-            the device is displayed in GUI window. 1.0 means no scaling,
-            scale > 1.0 makes it larger, scale < 1.0 makes it smaller.
         options['platform'] (text):
             A string which specifies platform such as 'Darwin' etc.
             see sys.platform
@@ -45,11 +42,9 @@ def scriptgenerator_main(options):
         outfile = codecs.getwriter('utf-8')(result_out)
 
     ui = scriptgenerator_ui.ScriptGeneratorUI(
-        scale=options.get('scale', 0.5),
-        platform_sys=options.get('platform', None))
-    timeouts = options.get('timeouts')
-    if timeouts:
-        ui.set_timeouts(timeouts)
+        screen_size=options.get('screen_size', (480, 800)),
+        platform_sys=options.get('platform', None),
+        timeouts=options.get('timeouts'))
 
     device = uiautomator_device.UiautomatorDevice()
     coder = uiautomator_coder.UiautomatorCoder()
@@ -73,11 +68,11 @@ def parse_options():
     parser = argparse.ArgumentParser(
         description='Phone automation script generator')
     parser.add_argument(
-        '-s', '--scale', default=0.5, type=float,
-        help='scale factor for screenshot when it is displayed')
-    parser.add_argument(
         '-o', '--output', default='',
         help='Output file path. Stdout if omitted')
+    parser.add_argument(
+        '-s', '--screen_size', default='480x800',
+        help='screen size (WxH)')
     parser.add_argument(
         '--wait_idle_timeout', default=5000, type=int,
         help='default timeout for wait.idle in milliseconds')
@@ -95,13 +90,15 @@ def parse_options():
 
 def main():
     """Entry point"""
+    logging.basicConfig(level=logging.INFO)
     cmd_options = parse_options()
 
     options = {}
     if cmd_options.output:
         outpath = os.path.abspath(cmd_options.output)
         options['result_out'] = io.open(outpath, 'wb')
-    options['scale'] = cmd_options.scale
+    options['screen_size'] = tuple(
+        int(s) for s in cmd_options.screen_size.split('x'))
     options['timeout'] = {
         'idle': cmd_options.wait_idle_timeout,
         'update': cmd_options.wait_update_timeout,

@@ -101,7 +101,11 @@ class Canvas(Widget):
         self.create_image = Mock()
         self.create_line = Mock()
         self.create_oval = Mock()
+        self.create_text = Mock()
+        self.create_rectangle = Mock()
         self.wait_window = Mock()
+        self.bbox = Mock()
+        self.tag_lower = Mock()
 
 
 class Button(Widget):

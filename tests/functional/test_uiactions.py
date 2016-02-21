@@ -34,18 +34,12 @@ def mainloop_testfunc(testfunc):
             'scale': 1.0,
             'platform': 'Darwin'
         }
-        mocks.device.dump.return_value = INI_DUMP_XML
+        if not isinstance(mocks.device.dump(), type('')):
+            mocks.device.dump.return_value = INI_DUMP_XML
         with patch.object(UiObjectFinder, '_FIND_OBJECT_DISTANCE_THRESH', new=100000000):
             scriptgenerator_main(options)
         assert mocks.uiroot.mainloop.called
     return wrap_testfunc
-
-
-@mainloop_testfunc
-def test_refresh_screen(mocks, result_out):
-    prev_call_count = mocks.device.screenshot.call_count
-    mocks.uiroot.process_event('r')
-    assert mocks.device.screenshot.call_count == prev_call_count + 1
 
 
 def mouse_events(mocks, events):
@@ -124,7 +118,8 @@ def set_element_find_result(mocks, **uia_attr):
     mocks.device.return_value = [elem]
 
     mocks.device.dump.return_value = create_dump_xml(elem.info)
-    mocks.uiroot.process_event('r')
+    mocks.uiroot.nametowidget(
+        'sidebar.refresh_button').process_event(None, None)
     return elem
 
 
@@ -153,15 +148,15 @@ def test_recent_apps(mocks, result_out):
     assert_press(mocks, result_out, 'mainframe.recent_button', 'APP_SWITCH')
 
 
-def click_sidebar_button(mocks, name):
+def click_sidebar_button(mocks, name, *args):
     button_widget_name = 'sidebar.{0}'.format(name)
-    mocks.uiroot.nametowidget(button_widget_name).process_event(None)
+    mocks.uiroot.nametowidget(button_widget_name).process_event(None, *args)
 
 
 @mainloop_testfunc
 def test_refresh_from_sidebar_button(mocks, result_out):
-    click_sidebar_button(mocks, 'refresh_button')
-    assert mocks.device.screenshot.called
+    click_sidebar_button(mocks, 'refresh_button', None)
+    assert mocks.device.dump.called
 
 
 @mainloop_testfunc
@@ -509,30 +504,6 @@ def test_pinch_out(mocks, result_out):
     assert '.pinch.Out(' in last_line_str
     assert 'percent=50' in last_line_str
     assert 'steps=5' in last_line_str
-
-
-@mainloop_testfunc
-def test_display_info(mocks, result_out):
-    elem = set_element_find_result(
-        mocks, resourceName='abc', className='def', text='ghi')
-
-    info_text = ['']
-    def actions_when_infodialog_displayed(infodialog):
-        text = infodialog.nametowidget('infotext')
-        info_text[0] = text.insert.call_args[0][1] # str of text.insert(END, str)
-        dialog_click_ok(infodialog)
-
-    set_dialog_action(
-        mocks, 'mainframe.canvas', actions_when_infodialog_displayed)
-
-    perform_user_input(mocks, [
-        user_input('mainframe.canvas', '<Button-2>', coord=(10, 20)),
-        user_input('mainframe.canvas', '<ButtonRelease-2>', coord=(10, 20)),
-        user_input('menu', 'Display info')
-    ])
-    assert 'resourceName: abc' in info_text[0]
-    assert 'className: def' in info_text[0]
-    assert 'text: ghi' in info_text[0]
 
 
 @mainloop_testfunc

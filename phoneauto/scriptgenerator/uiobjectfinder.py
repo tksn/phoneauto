@@ -8,19 +8,7 @@
 from __future__ import unicode_literals
 import math
 import sys
-
-
-class UiObjectNotFound(Exception):
-    """Exception raised when the UI object is not found on the screen"""
-
-    def __init__(self, message):
-        """Initialize exception object"""
-        super(UiObjectNotFound, self).__init__()
-        self.message = message
-
-    def __str__(self):
-        """Provide string representation of the exception"""
-        return 'UiObjectNotFound: ' + self.message
+from phoneauto.scriptgenerator.exception import UiObjectNotFound
 
 
 class UiObjectLocator(object):
@@ -39,6 +27,16 @@ class UiObjectLocator(object):
         """
         self._filters = filters
         self._index = index
+        self._meta = None
+
+    def set_meta(self, meta):
+        """Set meta information"""
+        self._meta = meta
+
+    @property
+    def meta(self):
+        """Meta information aquired on search"""
+        return self._meta
 
     @property
     def filters(self):
@@ -77,9 +75,9 @@ class UiObjectFinder(object):
                 Optional key-value pairs which filter search result
         Returns:
             locator object
-        Raises:
-            UiObjectNotFound: If there is no such object corresponds to
-                given coordinates and criteria.
+        Raiseafes:
+          eafe  UiObjectNotFound: If there is no such object corresponds to
+         f       given coordinates and criteria.
         """
         # Find all objects which contain (x, y)
         objects_iter = self._find_objects_contains(
@@ -93,6 +91,7 @@ class UiObjectFinder(object):
         # If failed, Use index in addition to filters
         locator = locator or UiObjectLocator(
             filters=criteria, index=smallest['index'])
+        locator.set_meta(smallest['object'])
         return locator
 
     def _find_objects_contains(self, coord, ignore_distant, **criteria):

@@ -8,6 +8,7 @@
 from __future__ import unicode_literals
 import uiautomator
 from . import keycode
+from phoneauto.scriptgenerator.exception import UiInconsitencyError
 
 
 class UiautomatorDevice(object):
@@ -55,7 +56,12 @@ class UiautomatorDevice(object):
 
     def _find(self, locator):
         """Find UI object using locator."""
-        return self._device(**locator.filters)[locator.index or 0]
+        index = locator.index or 0
+        objs = self._device(**locator.filters)
+        if len(objs) <= index:
+            raise UiInconsitencyError(
+                    'locator.index not found on device screen')
+        return objs[index]
 
     def set_text(self, locator, text):
         """Set text to a UI object which is specified by the locator
@@ -231,7 +237,7 @@ class UiautomatorDevice(object):
         Args:
             start (tuple): Start point coordinates (xS, yS)
             end (tuple): End point coordinates (xE, yE)
-            options (dict): optional key-value pairs, such as steps=100.
+            options (dict): optional key-value pairs, such as {'steps': 100}.
         """
         coords = start + end
         self._device.drag(*coords, **options)
@@ -242,7 +248,7 @@ class UiautomatorDevice(object):
         Args:
             start (tuple): Start point coordinates (xS, yS)
             end (tuple): End point coordinates (xE, yE)
-            options (dict): optional key-value pairs such as steps=100.
+            options (dict): optional key-value pairs, such as {'steps': 100}.
         """
         coords = start + end
         self._device.swipe(*coords, **options)

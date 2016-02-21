@@ -7,10 +7,12 @@ import pytest
 def mocks(request, monkeypatch):
     from tests import tkinter_mock
     from tests import uiautomator_mock
+    from tests import screenrecord_mock
 
     class Mocks(object): pass
 
     m = Mocks()
     m.uiroot = tkinter_mock.install(monkeypatch)
+    m.screenrecord = screenrecord_mock.install(monkeypatch)
     m.device, m.dummy_img = uiautomator_mock.install(monkeypatch)
     return m
