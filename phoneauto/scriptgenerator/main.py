@@ -19,6 +19,7 @@ from phoneauto.scriptgenerator import scriptgenerator_ui
 from phoneauto.scriptgenerator import scriptgenerator
 from phoneauto.scriptgenerator import uiautomator_device
 from phoneauto.scriptgenerator import uiautomator_coder
+from phoneauto.scriptgenerator import screenrecord
 
 
 def scriptgenerator_main(options):
@@ -105,6 +106,9 @@ def main():
         'exists': cmd_options.wait_exists_timeout,
         'gone': cmd_options.wait_gone_timeout
     }
+
+    screenrecord.check_prerequisites()
+
     scriptgenerator_main(options)
 
 

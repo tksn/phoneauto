@@ -347,10 +347,7 @@ class ScriptGeneratorUI(object):
 
     def _set_screen_scale(self):
         """Sets screen scale information"""
-        original_size = self._controller.execute('get_screen_size')
-        scaled_size = self._screenshot['size']
-        self._scale = (scaled_size[0] / original_size[0],
-                       scaled_size[1] / original_size[1])
+        self._scale = self._screenrecord.get_scale()
 
     def _descale(self, coord):
         """Converts a coordinate from canvas-coordinats to

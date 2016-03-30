@@ -49,6 +49,7 @@ class Screenrecord(Thread):
         self.__alive = True
         self.__queue = Queue()
         self.__size = (width, height)
+        self.__orig_size = self._get_screencap()[1]
 
     @property
     def queue(self):
@@ -62,16 +63,25 @@ class Screenrecord(Thread):
     def height(self):
         return self.__size[1]
 
-    def capture_oneshot(self):
+    def get_scale(self):
+        return (self.width / self.__orig_size[0],
+                 self.height / self.__orig_size[1])
+
+    def _get_screencap(self):
         command = [
             _ADB_EXE,
             'exec-out',
             'screencap',
             '-p']
         buf_size = self.width * self.height * _NUM_COMPONENT
-        adb_proc = Popen(command, stdout=PIPE, bufsize=buf_size)
+        adb_proc = Popen(command, stdout=PIPE)
         png_data, _ = adb_proc.communicate()
-        return Image.open(io.BytesIO(png_data)).resize(self.__size)
+        orig_image = Image.open(io.BytesIO(png_data))
+        resized_image = orig_image.resize(self.__size)
+        return (resized_image, orig_image.size)
+
+    def capture_oneshot(self):
+        return self._get_screencap()[0]
 
     def run(self):
         logger = logging.getLogger(__name__)
