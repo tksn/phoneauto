@@ -9,8 +9,10 @@ from distutils.spawn import find_executable
 import io
 import logging
 from queue import Queue
+import subprocess
 from subprocess import Popen, PIPE
 from threading import Thread
+import time
 from PIL import Image
 
 
@@ -40,6 +42,15 @@ def get_adb_command(width, height):
         '--output-format=h264',
         '--size={0}x{1}'.format(width, height),
         '-']
+
+
+def get_adb_keysend_command(keycode_str):
+    return [
+        _ADB_EXE,
+        'shell',
+        'input',
+        'keyevent',
+        keycode_str]
 
 
 class Screenrecord(Thread):
@@ -125,6 +136,13 @@ class Screenrecord(Thread):
                 start_video()
         stop_video()
         logger.info('thread stop')
+
+    def kick(self):
+        for i in range(3):
+            subprocess.call(get_adb_keysend_command('KEYCODE_APP_SWITCH'))
+            time.sleep(0.5)
+            subprocess.call(get_adb_keysend_command('KEYCODE_APP_SWITCH'))
+            time.sleep(0.5)
 
     def join(self, timeout=None):
         self.__alive = False

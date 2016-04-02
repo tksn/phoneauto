@@ -333,13 +333,6 @@ _create_command(command_name='set_orientation',
                 kwarg_list=(_kwarg('orientation'),))
 
 
-@command('video_init')
-def _video_init(objs, **_):
-    for kn in ('APP_SWITCH', 'HOME', 'APP_SWITCH', 'HOME'):
-        objs.device.press_key(kn, meta=None)
-        time.sleep(1)
-
-
 @command('get_hierarchy_view_object_info')
 def _get_hierarchy_view_object_info(objs, **command_args):
     """Get object's inforamtion such as text, contentDescription and boudns"""

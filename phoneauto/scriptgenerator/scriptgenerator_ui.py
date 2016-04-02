@@ -309,7 +309,16 @@ class ScriptGeneratorUI(object):
         """Workaround: Some movements on the device's screen are needed
         in order to pull up first few frames from the device..
         """
-        self._controller.execute('video_init')
+        self._screenrecord.kick()
+
+    def _refresh_hierarchy_view(self, screen_refreshed):
+        if self._controller is None:
+            return
+        interval = (self._HVIEW_REFRESH_INTERVAL_AFTER_SCR_REFRESH
+                    if screen_refreshed else self._HVIEW_REFRESH_INTERVAL)
+        hierarchy_view_age = time.time() - self.hierarchy_view_timestamp
+        if hierarchy_view_age > interval:
+            self._acquire_hierarchy_view()
 
     def _refresh_screen(self):
         from tkinter import NW
@@ -329,11 +338,8 @@ class ScriptGeneratorUI(object):
             if all_other_items:
                 canvas.tag_lower(image_id, all_other_items[0])
             self._screenshot = {'image': disp_frame, 'id': image_id}
-            if (hierarchy_view_age >
-                    self._HVIEW_REFRESH_INTERVAL_AFTER_SCR_REFRESH):
-                self._acquire_hierarchy_view()
-        elif hierarchy_view_age > self._HVIEW_REFRESH_INTERVAL:
-            self._acquire_hierarchy_view()
+
+        self._refresh_hierarchy_view(frame)
         self._root.after(self._SCR_REFRESH_INTERVAL, self._refresh_screen)
 
     def _acquire_hierarchy_view(self):
