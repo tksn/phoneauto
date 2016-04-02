@@ -15,6 +15,7 @@ def install(monkeypatch):
     dummy_img = PIL.Image.new(
         mode='RGB', size=(_SCREEN_WIDTH, _SCREEN_HEIGHT))
     m.capture_oneshot.return_value = dummy_img
+    m.get_scale.return_value = (1.0, 1.0)
 
     monkeypatch.setattr(
         'phoneauto.scriptgenerator.screenrecord.Screenrecord', m_class)
