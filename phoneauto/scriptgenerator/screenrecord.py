@@ -64,8 +64,9 @@ class Screenrecord(Thread):
         return self.__size[1]
 
     def get_scale(self):
-        return (self.width / self.__orig_size[0],
-                 self.height / self.__orig_size[1])
+        return (
+            self.width / self.__orig_size[0],
+            self.height / self.__orig_size[1])
 
     def _get_screencap(self):
         command = [
